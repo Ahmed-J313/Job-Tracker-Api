@@ -1,5 +1,7 @@
 # Job Tracker API
 
+[![Tests](https://github.com/Ahmed-J313/Job-Tracker-Api/actions/workflows/test.yml/badge.svg)](https://github.com/Ahmed-J313/Job-Tracker-Api/actions/workflows/test.yml)
+
 A personal REST API for tracking job applications — log them, move them through statuses, and see what's pending at a glance. Built with Flask, JWT auth, SQLAlchemy, pytest, and Docker.
 
 ## Tech stack
