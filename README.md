@@ -2,89 +2,55 @@
 
 [![Tests](https://github.com/Ahmed-J313/Job-Tracker-Api/actions/workflows/test.yml/badge.svg)](https://github.com/Ahmed-J313/Job-Tracker-Api/actions/workflows/test.yml)
 
-A personal REST API for tracking job applications — log them, move them through statuses, and see what's pending at a glance. Built with Flask, JWT auth, SQLAlchemy, pytest, and Docker.
+A personal tool for keeping track of job applications — add the jobs you've applied to, update their status as you hear back, and see where things stand. You can use it through a friendly menu or the API directly.
 
-## Tech stack
-Flask · Flask-SQLAlchemy · Flask-JWT-Extended · SQLite · pytest · Docker
+## Get started
 
-## Quickstart
+- Install Docker Desktop: https://www.docker.com/products/docker-desktop/
+- Clone this repo: `git clone https://github.com/Ahmed-J313/Job-Tracker-Api.git`
+- `cd Job-Tracker-Api`
 
-**Local:**
-```bash
-python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-flask --app app run
-```
+The helper script below starts the app for you. If you'd rather start it yourself, run `docker compose up --build`.
 
-**Docker:**
-```bash
-docker compose up --build
-```
-API at `http://localhost:5000`.
+## Use it
 
-## API examples
+- Run `python tracker.py`
+- It checks whether the app is running, and offers to start it with Docker if not
+- The first time, it'll offer to create an account for you
+- Then you'll see a menu:
+  - **Add a job I applied to** — enter the company and role, plus optional platform, job URL, and notes
+  - **See my applications** — list everything, or just one status
+  - **Update a job's status** — pick a job from the list and move it to a new status
+  - **See my stats** — counts of how many jobs are in each status
+  - Press `q` when done
 
-Register and log in:
-```bash
-curl -X POST localhost:5000/api/auth/register \
-  -H 'Content-Type: application/json' \
-  -d '{"email":"you@example.com","password":"secret123"}'
+No curl, no tokens, no JSON — just answer the prompts.
 
-TOKEN=$(curl -s -X POST localhost:5000/api/auth/login \
-  -H 'Content-Type: application/json' \
-  -d '{"email":"you@example.com","password":"secret123"}' \
-  | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
-```
+## Prefer typing commands?
 
-Log an application:
-```bash
-curl -X POST localhost:5000/api/applications \
-  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
-  -d '{"company":"Meow","role_title":"Software Engineer","platform":"Ashby","job_url":"https://jobs.ashbyhq.com/meow/..."}'
-```
+- Register: `POST /api/auth/register` with `email` and `password`
+- Log in: `POST /api/auth/login` with `email` and `password`, returns a token
+- Add a job: `POST /api/applications` with `company`, `role_title`, and optional `platform`, `job_url`, `notes`
+- See everything: `GET /api/applications`
+- Filter by status: `GET /api/applications?status=...`
+- Update one: `PUT /api/applications/:id` with a new `status`
+- Stats: `GET /api/applications/stats`
+- Valid statuses: `applied`, `interviewing`, `offer`, `rejected`
 
-List everything in interviewing:
-```bash
-curl "localhost:5000/api/applications?status=interviewing" \
-  -H "Authorization: Bearer $TOKEN"
-```
+## Without Docker
 
-Move one to offer:
-```bash
-curl -X PUT localhost:5000/api/applications/1 \
-  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
-  -d '{"status":"offer"}'
-```
+- `python -m venv .venv && source .venv/bin/activate`
+- `pip install -r requirements.txt`
+- `flask --app app run` (run this from inside the project folder)
 
-Stats:
-```bash
-curl localhost:5000/api/applications/stats \
-  -H "Authorization: Bearer $TOKEN"
-```
+## Tests
 
-## Running tests
-```bash
-pytest -v
-```
-12–15 tests: auth flows, CRUD, cross-user isolation, validation, filters, stats.
+- `pytest -v`
+- Covers auth, CRUD, cross-user isolation, validation, filters, stats, and the `tracker.py` menu script
 
-## Project structure
-```
-job-tracker-api/
-├── app/
-│   ├── __init__.py        # app factory, blueprint registration
-│   ├── models.py          # User, Application
-│   ├── auth.py            # /api/auth routes
-│   └── applications.py    # /api/applications routes
-├── tests/
-│   ├── conftest.py        # fixtures: app, client, user, token
-│   ├── test_auth.py
-│   └── test_applications.py
-├── Dockerfile
-├── docker-compose.yml
-├── requirements.txt
-└── README.md
-```
+## What's inside
 
-## Status
-v1 MVP — API only, no frontend.
+- Flask · SQLAlchemy · JWT auth · SQLite · pytest · Docker
+- `tracker.py` — the friendly menu (start here)
+- `app/` — the Flask API
+- `tests/` — the pytest suite
