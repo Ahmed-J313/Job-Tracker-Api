@@ -1,0 +1,44 @@
+from datetime import date, datetime
+
+from app import db
+
+
+class User(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    email = db.Column(db.String(255), unique=True, nullable=False, index=True)
+    password_hash = db.Column(db.String(255), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    applications = db.relationship(
+        "Application", backref="user", lazy=True, cascade="all, delete-orphan"
+    )
+
+
+class Application(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(
+        db.Integer, db.ForeignKey("user.id"), nullable=False, index=True
+    )
+    company = db.Column(db.String(255), nullable=False)
+    role_title = db.Column(db.String(255), nullable=False)
+    platform = db.Column(db.String(255))
+    status = db.Column(db.String(32), nullable=False, default="applied")
+    date_applied = db.Column(db.Date, default=date.today)
+    job_url = db.Column(db.String(1024))
+    notes = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "company": self.company,
+            "role_title": self.role_title,
+            "platform": self.platform,
+            "status": self.status,
+            "date_applied": self.date_applied.isoformat() if self.date_applied else None,
+            "job_url": self.job_url,
+            "notes": self.notes,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
