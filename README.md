@@ -1,19 +1,16 @@
 # Job Tracker API
 
-[![Tests](https://github.com/Ahmed-J313/Job-Tracker-Api/actions/workflows/test.yml/badge.svg)](https://github.com/Ahmed-J313/Job-Tracker-Api/actions/workflows/test.yml)
-
 I made this to keep track of my job applications. You log where you applied and it keeps the status of each one (applied, interviewing, offer, rejected) .
 
-## Setup
+## Setup, step by step
 
-You need Docker Desktop: https://www.docker.com/products/docker-desktop/
-
-- `git clone https://github.com/Ahmed-J313/Job-Tracker-Api.git`
-- `cd Job-Tracker-Api`
-
-## How to use
-
-Just run `python tracker.py` and follow the prompts. It starts the app for you if it's not already running, and the first time it'll walk you through making an account.
+1. Install Docker Desktop: https://www.docker.com/products/docker-desktop/
+2. Open Docker Desktop and wait until it says it's running.
+3. Open a terminal. On Windows, search "PowerShell" in the start menu and open it. Everything below gets typed in there.
+4. Type `git clone https://github.com/Ahmed-J313/Job-Tracker-Api.git` and press Enter. Then type `cd Job-Tracker-Api` and press Enter.
+5. Type `docker compose up --build -d` and press Enter. First time takes a few minutes because it downloads Python. That's normal, just let it go.
+6. Type `docker compose ps` and press Enter. Check it says running.
+7. Type `python tracker.py` and press Enter. The first time it'll walk you through making an account.
 
 Then you get a menu:
 
@@ -23,6 +20,17 @@ Then you get a menu:
 - **See my stats**
 
 Press `q` when you're done. That's really it, no curl or anything.
+
+When you're done for the day, run `docker compose down`. Your stuff is saved and it'll be there next time you start it.
+
+## Next time you open it
+
+You don't need to build again. Just open Docker Desktop, open a terminal in this folder, and type:
+
+- `docker compose up -d`
+- `python tracker.py`
+
+That's it.
 
 ## Why is there a login if it's all on my computer?
 
@@ -79,3 +87,4 @@ Built with Flask, SQLAlchemy, JWT, SQLite, pytest, Docker.
 - `tracker.py` - the menu script, easiest way to use this
 - `app/` - the api code
 - `tests/` - tests
+- `SCOPE.md` / `DESIGN.md` - planning docs
