@@ -1,56 +1,80 @@
 # Job Tracker API
 
-[![Tests](https://github.com/Ahmed-J313/Job-Tracker-Api/actions/workflows/test.yml/badge.svg)](https://github.com/Ahmed-J313/Job-Tracker-Api/actions/workflows/test.yml)
+I made this to keep track of my job applications. You log where you applied and it keeps the status of each one (applied, interviewing, offer, rejected) .
 
-A personal tool for keeping track of job applications — add the jobs you've applied to, update their status as you hear back, and see where things stand. You can use it through a friendly menu or the API directly.
+## Setup
 
-## Get started
+You need Docker Desktop: https://www.docker.com/products/docker-desktop/
 
-- Install Docker Desktop: https://www.docker.com/products/docker-desktop/
-- Clone this repo: `git clone https://github.com/Ahmed-J313/Job-Tracker-Api.git`
+- `git clone https://github.com/Ahmed-J313/Job-Tracker-Api.git`
 - `cd Job-Tracker-Api`
 
-The helper script below starts the app for you. If you'd rather start it yourself, run `docker compose up --build`.
+## How to use
 
-## Use it
+Just run `python tracker.py` and follow the prompts. It starts the app for you if it's not already running, and the first time it'll walk you through making an account.
 
-- Run `python tracker.py`
-- It checks whether the app is running, and offers to start it with Docker if not
-- The first time, it'll offer to create an account for you
-- Then you'll see a menu:
-  - **Add a job I applied to** — enter the company and role, plus optional platform, job URL, and notes
-  - **See my applications** — list everything, or just one status
-  - **Update a job's status** — pick a job from the list and move it to a new status
-  - **See my stats** — counts of how many jobs are in each status
-  - Press `q` when done
+Then you get a menu:
 
-No curl, no tokens, no JSON — just answer the prompts.
+- **Add a job I applied to**
+- **See my applications**
+- **Update a job's status**
+- **See my stats**
 
-## Prefer typing commands?
+Press `q` when you're done. That's really it, no curl or anything.
 
-- Register: `POST /api/auth/register` with `email` and `password`
-- Log in: `POST /api/auth/login` with `email` and `password`, returns a token
-- Add a job: `POST /api/applications` with `company`, `role_title`, and optional `platform`, `job_url`, `notes`
-- See everything: `GET /api/applications`
-- Filter by status: `GET /api/applications?status=...`
-- Update one: `PUT /api/applications/:id` with a new `status`
-- Stats: `GET /api/applications/stats`
-- Valid statuses: `applied`, `interviewing`, `offer`, `rejected`
+## Why is there a login if it's all on my computer?
+
+Right now you don't need it. It's there so I can host this on a server later and have multiple people use it without seeing each other's stuff. The script handles the login for you so you only deal with it once.
+
+## If you'd rather use curl
+
+Create an account:
+
+- `curl -X POST localhost:5000/api/auth/register -H 'Content-Type: application/json' -d '{"email":"you@example.com","password":"secret123"}'`
+
+Log in and save the token:
+
+- `TOKEN=$(curl -s -X POST localhost:5000/api/auth/login -H 'Content-Type: application/json' -d '{"email":"you@example.com","password":"secret123"}' | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")`
+
+Add a job:
+
+- `curl -X POST localhost:5000/api/applications -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"company":"Meow","role_title":"Software Engineer","platform":"Ashby"}'`
+
+See everything:
+
+- `curl localhost:5000/api/applications -H "Authorization: Bearer $TOKEN"`
+
+Only show interviews:
+
+- `curl "localhost:5000/api/applications?status=interviewing" -H "Authorization: Bearer $TOKEN"`
+
+Update one (this moves app #1 to offer):
+
+- `curl -X PUT localhost:5000/api/applications/1 -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"status":"offer"}'`
+
+Stats:
+
+- `curl localhost:5000/api/applications/stats -H "Authorization: Bearer $TOKEN"`
 
 ## Without Docker
 
+Do this inside the project folder:
+
 - `python -m venv .venv && source .venv/bin/activate`
 - `pip install -r requirements.txt`
-- `flask --app app run` (run this from inside the project folder)
+- `flask --app app run`
 
 ## Tests
 
 - `pytest -v`
-- Covers auth, CRUD, cross-user isolation, validation, filters, stats, and the `tracker.py` menu script
 
-## What's inside
+Tests cover login/register, adding and updating applications, making sure users can't see each other's stuff, bad input, filters, and stats.
 
-- Flask · SQLAlchemy · JWT auth · SQLite · pytest · Docker
-- `tracker.py` — the friendly menu (start here)
-- `app/` — the Flask API
-- `tests/` — the pytest suite
+## What's in here
+
+Built with Flask, SQLAlchemy, JWT, SQLite, pytest, Docker.
+
+- `tracker.py` - the menu script, easiest way to use this
+- `app/` - the api code
+- `tests/` - tests
+- `SCOPE.md` / `DESIGN.md` - planning docs
