@@ -1,5 +1,7 @@
 # Job Tracker API
 
+[![Tests](https://github.com/Ahmed-J313/Job-Tracker-Api/actions/workflows/test.yml/badge.svg)](https://github.com/Ahmed-J313/Job-Tracker-Api/actions/workflows/test.yml)
+
 I made this to keep track of my job applications. You log where you applied and it keeps the status of each one (applied, interviewing, offer, rejected) .
 
 ## Setup
@@ -77,4 +79,3 @@ Built with Flask, SQLAlchemy, JWT, SQLite, pytest, Docker.
 - `tracker.py` - the menu script, easiest way to use this
 - `app/` - the api code
 - `tests/` - tests
-- `SCOPE.md` / `DESIGN.md` - planning docs
