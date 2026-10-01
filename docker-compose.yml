@@ -1,0 +1,10 @@
+services:
+  api:
+    build: .
+    ports:
+      - "5000:5000"
+    environment:
+      - JWT_SECRET_KEY=dev-only-change-me
+      - DATABASE_URL=sqlite:////app/data/job_tracker.db
+    volumes:
+      - ./data:/app/data
