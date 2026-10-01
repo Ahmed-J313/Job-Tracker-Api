@@ -33,8 +33,8 @@ def api(method, path, token=None, json_body=None):
 
 def api_is_up():
     try:
-        urllib.request.urlopen(BASE_URL, timeout=2)
-        return True
+        with urllib.request.urlopen(BASE_URL, timeout=2):
+            return True
     except urllib.error.HTTPError:
         return True
     except urllib.error.URLError:
@@ -162,7 +162,7 @@ def log_application(token):
 def see_applications(token):
     status_filter = ask(
         "Filter by status (applied/interviewing/offer/rejected, Enter for all): ", required=False
-    )
+    ).lower()
     apps = list_applications(token, status_filter or None)
     print_applications(apps)
 

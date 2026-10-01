@@ -155,6 +155,71 @@ def test_update_status_valid_choice_sends_one_put():
     )
 
 
+# --- ensure_app_running() ---
+
+def test_ensure_app_running_already_up_skips_docker():
+    with patch("tracker.api_is_up", return_value=True), \
+         patch("tracker.subprocess.run") as mock_run, \
+         patch("builtins.input") as mock_input:
+        assert tracker.ensure_app_running() is True
+
+    mock_run.assert_not_called()
+    mock_input.assert_not_called()
+
+
+def test_ensure_app_running_user_declines():
+    with patch("tracker.api_is_up", return_value=False), \
+         patch("builtins.input", return_value="n"), \
+         patch("tracker.subprocess.run") as mock_run:
+        assert tracker.ensure_app_running() is False
+
+    mock_run.assert_not_called()
+
+
+def test_ensure_app_running_missing_compose_file():
+    with patch("tracker.api_is_up", return_value=False), \
+         patch("builtins.input", return_value="y"), \
+         patch("tracker.os.path.exists", return_value=False), \
+         patch("tracker.subprocess.run") as mock_run:
+        assert tracker.ensure_app_running() is False
+
+    mock_run.assert_not_called()
+
+
+def test_ensure_app_running_docker_not_installed():
+    with patch("tracker.api_is_up", return_value=False), \
+         patch("builtins.input", return_value="y"), \
+         patch("tracker.os.path.exists", return_value=True), \
+         patch("tracker.subprocess.run", side_effect=FileNotFoundError):
+        assert tracker.ensure_app_running() is False
+
+
+def test_ensure_app_running_docker_command_fails():
+    with patch("tracker.api_is_up", return_value=False), \
+         patch("builtins.input", return_value="y"), \
+         patch("tracker.os.path.exists", return_value=True), \
+         patch("tracker.subprocess.run", return_value=MagicMock(returncode=1, stdout="", stderr="compose error")):
+        assert tracker.ensure_app_running() is False
+
+
+def test_ensure_app_running_starts_and_waits_for_api():
+    with patch("tracker.api_is_up", side_effect=[False, False, True]), \
+         patch("builtins.input", return_value="y"), \
+         patch("tracker.os.path.exists", return_value=True), \
+         patch("tracker.subprocess.run", return_value=MagicMock(returncode=0, stdout="", stderr="")), \
+         patch("tracker.time.sleep"):
+        assert tracker.ensure_app_running() is True
+
+
+def test_ensure_app_running_times_out_if_api_never_comes_up():
+    with patch("tracker.api_is_up", side_effect=[False] + [False] * 30), \
+         patch("builtins.input", return_value="y"), \
+         patch("tracker.os.path.exists", return_value=True), \
+         patch("tracker.subprocess.run", return_value=MagicMock(returncode=0, stdout="", stderr="")), \
+         patch("tracker.time.sleep"):
+        assert tracker.ensure_app_running() is False
+
+
 # --- login() ---
 
 def test_login_success_does_not_register():
