@@ -83,10 +83,8 @@ job-tracker-api/
 ├── Dockerfile
 ├── docker-compose.yml
 ├── requirements.txt
-├── README.md
-├── SCOPE.md
-└── DESIGN.md
+└── README.md
 ```
 
 ## Status
-v1 MVP — API only, no frontend. See `SCOPE.md` for what's in and what's deliberately out.
+v1 MVP — API only, no frontend.
