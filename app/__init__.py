@@ -1,12 +1,13 @@
 import os
 from datetime import timedelta
 
-from flask import Flask, render_template
+from flask import Flask, jsonify, render_template
 from flask_jwt_extended import JWTManager
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.pool import StaticPool
+from werkzeug.exceptions import HTTPException
 
 db = SQLAlchemy()
 jwt = JWTManager()
@@ -24,6 +25,8 @@ def create_app(config_overrides=None):
     app.config["JWT_SECRET_KEY"] = os.environ.get("JWT_SECRET_KEY")
     app.config["JWT_ACCESS_TOKEN_EXPIRES"] = timedelta(days=1)
     app.config["JWT_ALGORITHM"] = "HS256"
+    app.config["DEBUG"] = False
+    app.config["MAX_CONTENT_LENGTH"] = 1 * 1024 * 1024
 
     if config_overrides:
         app.config.update(config_overrides)
@@ -80,6 +83,13 @@ def create_app(config_overrides=None):
         )
         response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
         return response
+
+    @app.errorhandler(Exception)
+    def handle_unexpected_error(e):
+        if isinstance(e, HTTPException):
+            return e
+        app.logger.exception("Unhandled exception")
+        return jsonify({"error": "Something went wrong"}), 500
 
     with app.app_context():
         db.create_all()
