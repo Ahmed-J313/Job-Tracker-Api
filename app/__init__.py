@@ -1,7 +1,7 @@
 import os
 from datetime import timedelta
 
-from flask import Flask
+from flask import Flask, render_template
 from flask_jwt_extended import JWTManager
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.pool import StaticPool
@@ -41,6 +41,10 @@ def create_app(config_overrides=None):
 
     app.register_blueprint(auth_bp, url_prefix="/api/auth")
     app.register_blueprint(applications_bp, url_prefix="/api/applications")
+
+    @app.route("/")
+    def index():
+        return render_template("index.html")
 
     with app.app_context():
         db.create_all()

@@ -1,0 +1,512 @@
+(function () {
+  "use strict";
+
+  const STATUSES = ["applied", "interviewing", "offer", "rejected"];
+  const STATUS_LABELS = {
+    applied: "Applied",
+    interviewing: "Interviewing",
+    offer: "Offer",
+    rejected: "Rejected",
+  };
+
+  const state = {
+    token: localStorage.getItem("jt_token"),
+    email: localStorage.getItem("jt_email") || "",
+    statusFilter: "",
+    search: "",
+    editingId: null,
+  };
+
+  // ---------- DOM refs ----------
+  const authView = document.getElementById("auth-view");
+  const appView = document.getElementById("app-view");
+
+  const loginForm = document.getElementById("login-form");
+  const registerForm = document.getElementById("register-form");
+  const loginError = document.getElementById("login-error");
+  const registerError = document.getElementById("register-error");
+
+  const accountEmailEl = document.getElementById("account-email");
+  const accountBtn = document.getElementById("account-btn");
+  const accountDropdown = document.getElementById("account-dropdown");
+  const signoutBtn = document.getElementById("signout-btn");
+
+  const tabButtons = document.querySelectorAll(".tab-btn");
+  const tabPanels = document.querySelectorAll(".tab-panel");
+
+  const statusFilterBtn = document.getElementById("status-filter-btn");
+  const statusFilterMenu = document.getElementById("status-filter-menu");
+  const statusFilterLabel = document.getElementById("status-filter-label");
+  const statusFilterItems = document.querySelectorAll("#status-filter-menu .dropdown-item");
+  const searchInput = document.getElementById("search-input");
+  const tbody = document.getElementById("applications-tbody");
+  const emptyState = document.getElementById("empty-state");
+
+  const recentList = document.getElementById("recent-activity-list");
+  const recentEmptyState = document.getElementById("recent-empty-state");
+
+  const addBtn = document.getElementById("add-application-btn");
+  const modal = document.getElementById("application-modal");
+  const modalTitle = document.getElementById("modal-title");
+  const appForm = document.getElementById("application-form");
+  const appFormError = document.getElementById("application-form-error");
+  const modalCancelBtn = document.getElementById("modal-cancel-btn");
+
+  const statusPopover = document.getElementById("status-popover");
+
+  const googleBtn = document.getElementById("google-signin-btn");
+
+  const EMPTY_ICON_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M3 7l1.5-3h15L21 7" />
+    <path d="M3 7v11a1 1 0 001 1h16a1 1 0 001-1V7" />
+    <path d="M3 7h18" />
+    <path d="M9 11a3 3 0 006 0" />
+  </svg>`;
+
+  function buildEmptyState(container, { title, subtitle, actionLabel, onAction, variant = "primary" }) {
+    container.innerHTML = "";
+
+    const icon = document.createElement("div");
+    icon.className = "empty-state-icon";
+    icon.innerHTML = EMPTY_ICON_SVG;
+    container.appendChild(icon);
+
+    const titleEl = document.createElement("p");
+    titleEl.className = "empty-state-title";
+    titleEl.textContent = title;
+    container.appendChild(titleEl);
+
+    if (subtitle) {
+      const subtitleEl = document.createElement("p");
+      subtitleEl.className = "empty-state-subtitle";
+      subtitleEl.textContent = subtitle;
+      container.appendChild(subtitleEl);
+    }
+
+    if (actionLabel && onAction) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = variant === "secondary" ? "btn-secondary" : "btn-primary";
+      btn.textContent = actionLabel;
+      btn.addEventListener("click", onAction);
+      container.appendChild(btn);
+    }
+  }
+
+  // ---------- API helper ----------
+  async function api(path, options = {}) {
+    const headers = Object.assign({}, options.headers);
+    if (options.body) headers["Content-Type"] = "application/json";
+    if (state.token) headers["Authorization"] = "Bearer " + state.token;
+
+    const res = await fetch("/api" + path, Object.assign({}, options, { headers }));
+
+    if (res.status === 401) {
+      signOut();
+      throw new Error("Session expired, please sign in again.");
+    }
+
+    let data = null;
+    const text = await res.text();
+    if (text) {
+      try { data = JSON.parse(text); } catch (_) { data = null; }
+    }
+
+    if (!res.ok) {
+      const message = (data && data.error) || "Something went wrong.";
+      throw new Error(message);
+    }
+    return data;
+  }
+
+  // ---------- Auth view ----------
+  document.querySelectorAll(".auth-tab-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".auth-tab-btn").forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+      const target = btn.dataset.authTab;
+      loginForm.hidden = target !== "login";
+      registerForm.hidden = target !== "register";
+      loginError.textContent = "";
+      registerError.textContent = "";
+    });
+  });
+
+  loginForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    loginError.textContent = "";
+    const email = document.getElementById("login-email").value.trim();
+    const password = document.getElementById("login-password").value;
+    try {
+      const data = await api("/auth/login", {
+        method: "POST",
+        body: JSON.stringify({ email, password }),
+      });
+      signIn(data.access_token, email);
+    } catch (err) {
+      loginError.textContent = err.message;
+    }
+  });
+
+  registerForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    registerError.textContent = "";
+    const email = document.getElementById("register-email").value.trim();
+    const password = document.getElementById("register-password").value;
+    try {
+      await api("/auth/register", {
+        method: "POST",
+        body: JSON.stringify({ email, password }),
+      });
+      const data = await api("/auth/login", {
+        method: "POST",
+        body: JSON.stringify({ email, password }),
+      });
+      signIn(data.access_token, email);
+    } catch (err) {
+      registerError.textContent = err.message;
+    }
+  });
+
+  const googleBtnOriginal = googleBtn.innerHTML;
+  googleBtn.addEventListener("click", () => {
+    googleBtn.disabled = true;
+    googleBtn.textContent = "Coming soon";
+    setTimeout(() => {
+      googleBtn.disabled = false;
+      googleBtn.innerHTML = googleBtnOriginal;
+    }, 1200);
+  });
+
+  function signIn(token, email) {
+    state.token = token;
+    state.email = email;
+    localStorage.setItem("jt_token", token);
+    localStorage.setItem("jt_email", email);
+    showAppView();
+  }
+
+  function signOut() {
+    state.token = null;
+    localStorage.removeItem("jt_token");
+    localStorage.removeItem("jt_email");
+    showAuthView();
+  }
+
+  signoutBtn.addEventListener("click", signOut);
+
+  // ---------- View switching ----------
+  function showAuthView() {
+    authView.hidden = false;
+    appView.hidden = true;
+  }
+
+  function showAppView() {
+    authView.hidden = true;
+    appView.hidden = false;
+    accountEmailEl.textContent = state.email || "account";
+    loadDashboard();
+    loadApplications();
+  }
+
+  // ---------- Account dropdown ----------
+  accountBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    accountDropdown.hidden = !accountDropdown.hidden;
+  });
+
+  document.addEventListener("click", () => {
+    accountDropdown.hidden = true;
+    statusPopover.hidden = true;
+    statusFilterMenu.hidden = true;
+  });
+
+  // ---------- Tabs ----------
+  tabButtons.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      tabButtons.forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+      tabPanels.forEach((panel) => panel.classList.remove("active"));
+      document.getElementById("tab-" + btn.dataset.tab).classList.add("active");
+
+      if (btn.dataset.tab === "dashboard") loadDashboard();
+      if (btn.dataset.tab === "applications") loadApplications();
+    });
+  });
+
+  // ---------- Dashboard ----------
+  async function loadDashboard() {
+    try {
+      const stats = await api("/applications/stats");
+      STATUSES.forEach((status) => {
+        document.getElementById("stat-" + status).textContent = stats[status] || 0;
+      });
+
+      const apps = await api("/applications");
+      renderRecentActivity(apps.slice(0, 5));
+    } catch (err) {
+      // stay silent on dashboard load errors beyond session expiry (handled in api())
+    }
+  }
+
+  function renderRecentActivity(apps) {
+    recentList.innerHTML = "";
+    recentEmptyState.hidden = apps.length > 0;
+
+    if (apps.length === 0) {
+      buildEmptyState(recentEmptyState, {
+        title: "Nothing yet",
+        subtitle: "Add your first application and it'll show up here.",
+      });
+    }
+
+    apps.forEach((app) => {
+      const li = document.createElement("li");
+      li.className = "recent-item";
+
+      const left = document.createElement("span");
+      left.textContent = `${app.company} · ${app.role_title}`;
+
+      const right = document.createElement("span");
+      right.className = "recent-item-meta";
+      right.textContent = STATUS_LABELS[app.status] + (app.date_applied ? " · " + app.date_applied : "");
+
+      li.appendChild(left);
+      li.appendChild(right);
+      recentList.appendChild(li);
+    });
+  }
+
+  // ---------- Applications tab ----------
+  statusFilterBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    statusFilterMenu.hidden = !statusFilterMenu.hidden;
+  });
+
+  function setStatusFilter(status) {
+    state.statusFilter = status;
+    statusFilterItems.forEach((item) => {
+      item.classList.toggle("active", item.dataset.status === status);
+    });
+    statusFilterLabel.textContent = status ? STATUS_LABELS[status] : "All statuses";
+  }
+
+  statusFilterItems.forEach((item) => {
+    item.addEventListener("click", (e) => {
+      e.stopPropagation();
+      setStatusFilter(item.dataset.status);
+      statusFilterMenu.hidden = true;
+      loadApplications();
+    });
+  });
+
+  let searchDebounce;
+  searchInput.addEventListener("input", () => {
+    clearTimeout(searchDebounce);
+    searchDebounce = setTimeout(() => {
+      state.search = searchInput.value.trim();
+      loadApplications();
+    }, 250);
+  });
+
+  async function loadApplications() {
+    const params = new URLSearchParams();
+    if (state.statusFilter) params.set("status", state.statusFilter);
+    if (state.search) params.set("search", state.search);
+    const qs = params.toString();
+
+    try {
+      const apps = await api("/applications" + (qs ? "?" + qs : ""));
+      renderApplications(apps);
+    } catch (err) {
+      // session-expiry already redirected; otherwise just leave the table as-is
+    }
+  }
+
+  function renderApplications(apps) {
+    tbody.innerHTML = "";
+    emptyState.hidden = apps.length > 0;
+
+    if (apps.length === 0) {
+      const noFiltersActive = !state.statusFilter && !state.search;
+      if (noFiltersActive) {
+        buildEmptyState(emptyState, {
+          title: "Your list starts here",
+          subtitle: "Add the first role you applied to. Everything else builds from there.",
+        });
+      } else {
+        buildEmptyState(emptyState, {
+          title: "No matches",
+          subtitle: "Nothing fits that filter or search right now.",
+          actionLabel: "Clear filters",
+          variant: "secondary",
+          onAction: () => {
+            setStatusFilter("");
+            state.search = "";
+            searchInput.value = "";
+            loadApplications();
+          },
+        });
+      }
+    }
+
+    apps.forEach((app) => {
+      const tr = document.createElement("tr");
+
+      tr.appendChild(cell(app.company));
+      tr.appendChild(cell(app.role_title));
+      tr.appendChild(cell(app.platform || "—"));
+
+      const statusTd = document.createElement("td");
+      const pillBtn = document.createElement("button");
+      pillBtn.type = "button";
+      pillBtn.className = "status-pill status-" + app.status;
+      pillBtn.textContent = STATUS_LABELS[app.status];
+      pillBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        openStatusPopover(pillBtn, app);
+      });
+      statusTd.appendChild(pillBtn);
+      tr.appendChild(statusTd);
+
+      tr.appendChild(cell(app.date_applied || "—"));
+
+      const actionsTd = document.createElement("td");
+      const actions = document.createElement("div");
+      actions.className = "row-actions";
+
+      const editBtn = document.createElement("button");
+      editBtn.type = "button";
+      editBtn.className = "row-action-btn";
+      editBtn.textContent = "Edit";
+      editBtn.addEventListener("click", () => openModal(app));
+
+      const deleteBtn = document.createElement("button");
+      deleteBtn.type = "button";
+      deleteBtn.className = "row-action-btn danger";
+      deleteBtn.textContent = "Delete";
+      deleteBtn.addEventListener("click", () => deleteApplication(app.id));
+
+      actions.appendChild(editBtn);
+      actions.appendChild(deleteBtn);
+      actionsTd.appendChild(actions);
+      tr.appendChild(actionsTd);
+
+      tbody.appendChild(tr);
+    });
+  }
+
+  function cell(text) {
+    const td = document.createElement("td");
+    td.textContent = text;
+    return td;
+  }
+
+  function openStatusPopover(anchorEl, app) {
+    const rect = anchorEl.getBoundingClientRect();
+    statusPopover.innerHTML = "";
+    statusPopover.style.top = window.scrollY + rect.bottom + 6 + "px";
+    statusPopover.style.left = window.scrollX + rect.left + "px";
+
+    STATUSES.forEach((status) => {
+      if (status === app.status) return;
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.textContent = STATUS_LABELS[status];
+      btn.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        statusPopover.hidden = true;
+        try {
+          await api("/applications/" + app.id, {
+            method: "PUT",
+            body: JSON.stringify({ status }),
+          });
+          loadApplications();
+          loadDashboard();
+        } catch (err) {
+          alert(err.message);
+        }
+      });
+      statusPopover.appendChild(btn);
+    });
+
+    statusPopover.hidden = false;
+  }
+
+  async function deleteApplication(id) {
+    if (!confirm("Delete this application?")) return;
+    try {
+      await api("/applications/" + id, { method: "DELETE" });
+      loadApplications();
+      loadDashboard();
+    } catch (err) {
+      alert(err.message);
+    }
+  }
+
+  // ---------- Add / edit modal ----------
+  addBtn.addEventListener("click", () => openModal(null));
+  modalCancelBtn.addEventListener("click", closeModal);
+  modal.addEventListener("click", (e) => {
+    if (e.target === modal) closeModal();
+  });
+
+  function openModal(app) {
+    appFormError.textContent = "";
+    state.editingId = app ? app.id : null;
+    modalTitle.textContent = app ? "Edit application" : "Add application";
+
+    document.getElementById("form-company").value = app ? app.company : "";
+    document.getElementById("form-role").value = app ? app.role_title : "";
+    document.getElementById("form-platform").value = app ? app.platform || "" : "";
+    document.getElementById("form-date").value = app ? app.date_applied || "" : "";
+    document.getElementById("form-job-url").value = app ? app.job_url || "" : "";
+    document.getElementById("form-notes").value = app ? app.notes || "" : "";
+
+    modal.hidden = false;
+  }
+
+  function closeModal() {
+    modal.hidden = true;
+  }
+
+  appForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    appFormError.textContent = "";
+
+    const payload = {
+      company: document.getElementById("form-company").value.trim(),
+      role_title: document.getElementById("form-role").value.trim(),
+      platform: document.getElementById("form-platform").value.trim() || null,
+      date_applied: document.getElementById("form-date").value || null,
+      job_url: document.getElementById("form-job-url").value.trim() || null,
+      notes: document.getElementById("form-notes").value.trim() || null,
+    };
+
+    try {
+      if (state.editingId) {
+        await api("/applications/" + state.editingId, {
+          method: "PUT",
+          body: JSON.stringify(payload),
+        });
+      } else {
+        await api("/applications", {
+          method: "POST",
+          body: JSON.stringify(payload),
+        });
+      }
+      closeModal();
+      loadApplications();
+      loadDashboard();
+    } catch (err) {
+      appFormError.textContent = err.message;
+    }
+  });
+
+  // ---------- Boot ----------
+  if (state.token) {
+    showAppView();
+  } else {
+    showAuthView();
+  }
+})();
