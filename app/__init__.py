@@ -3,11 +3,14 @@ from datetime import timedelta
 
 from flask import Flask, render_template
 from flask_jwt_extended import JWTManager
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.pool import StaticPool
 
 db = SQLAlchemy()
 jwt = JWTManager()
+limiter = Limiter(key_func=get_remote_address, default_limits=["100 per minute"])
 
 
 def create_app(config_overrides=None):
@@ -30,6 +33,11 @@ def create_app(config_overrides=None):
     if not app.config["JWT_SECRET_KEY"]:
         raise RuntimeError("JWT_SECRET_KEY environment variable is required")
 
+    # Rate limiting would make login/register attempts across many tests
+    # flaky and order-dependent, so it's off when TESTING is set.
+    if app.config.get("TESTING"):
+        app.config["RATELIMIT_ENABLED"] = False
+
     if app.config["SQLALCHEMY_DATABASE_URI"].startswith("postgresql://"):
         print("Using Postgres")
     else:
@@ -45,6 +53,7 @@ def create_app(config_overrides=None):
 
     db.init_app(app)
     jwt.init_app(app)
+    limiter.init_app(app)
 
     from app.auth import auth_bp
     from app.applications import applications_bp
