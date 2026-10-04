@@ -26,6 +26,11 @@ def create_app(config_overrides=None):
     if config_overrides:
         app.config.update(config_overrides)
 
+    if app.config["SQLALCHEMY_DATABASE_URI"].startswith("postgresql://"):
+        print("Using Postgres")
+    else:
+        print("Using local SQLite")
+
     # SQLite in-memory DBs (used by tests) live on a single connection,
     # otherwise each new connection gets its own empty database.
     if app.config["SQLALCHEMY_DATABASE_URI"] in ("sqlite://", "sqlite:///:memory:"):
