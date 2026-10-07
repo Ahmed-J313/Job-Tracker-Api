@@ -39,8 +39,9 @@ def create_app(config_overrides=None):
         raise RuntimeError("JWT_SECRET_KEY environment variable is required")
 
     # Rate limiting would make login/register attempts across many tests
-    # flaky and order-dependent, so it's off when TESTING is set.
-    if app.config.get("TESTING"):
+    # flaky and order-dependent, so it's off when TESTING is set - unless a
+    # test explicitly opts back in to exercise the rate limit itself.
+    if app.config.get("TESTING") and "RATELIMIT_ENABLED" not in (config_overrides or {}):
         app.config["RATELIMIT_ENABLED"] = False
 
     if app.config["SQLALCHEMY_DATABASE_URI"].startswith("postgresql"):
@@ -68,6 +69,10 @@ def create_app(config_overrides=None):
 
     @app.route("/")
     def index():
+        return render_template("index.html")
+
+    @app.route("/reset-password")
+    def reset_password_page():
         return render_template("index.html")
 
     @app.after_request

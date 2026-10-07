@@ -100,7 +100,11 @@ def login():
             print("Okay, come back once you have an account.")
             return None
 
-        reg_status, reg_data = api("POST", "/api/auth/register", json_body={"email": email, "password": password})
+        reg_status, reg_data = api(
+            "POST",
+            "/api/auth/register",
+            json_body={"email": email, "password": password, "confirm_password": password},
+        )
         if reg_status != 201:
             print(f"Couldn't create that account: {reg_data.get('error', 'something went wrong')}")
             return None
