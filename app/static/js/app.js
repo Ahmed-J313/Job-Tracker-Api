@@ -15,6 +15,7 @@
     statusFilter: "",
     search: "",
     editingId: null,
+    gmailConnected: false,
   };
 
   // ---------- DOM refs ----------
@@ -49,6 +50,14 @@
   const accountBtn = document.getElementById("account-btn");
   const accountDropdown = document.getElementById("account-dropdown");
   const signoutBtn = document.getElementById("signout-btn");
+
+  const connectGmailBtn = document.getElementById("connect-gmail-btn");
+  const connectGmailLabel = document.getElementById("connect-gmail-label");
+  const connectGmailBadge = document.getElementById("connect-gmail-badge");
+  const gmailOnboardingModal = document.getElementById("gmail-onboarding-modal");
+  const gmailOnboardingSkip = document.getElementById("gmail-onboarding-skip");
+  const gmailOnboardingConnect = document.getElementById("gmail-onboarding-connect");
+  const toastEl = document.getElementById("toast");
 
   const tabButtons = document.querySelectorAll(".tab-btn");
   const tabPanels = document.querySelectorAll(".tab-panel");
@@ -303,7 +312,7 @@
         method: "POST",
         body: JSON.stringify({ credential: response.credential }),
       });
-      signIn(data.access_token, data.email);
+      signIn(data.access_token, data.email, { offerGmailOnboarding: data.is_new_user });
     } catch (err) {
       loginError.textContent = err.message;
     }
@@ -329,12 +338,15 @@
     if (gsiScript) gsiScript.addEventListener("load", initGoogleSignIn);
   }
 
-  function signIn(token, email) {
+  function signIn(token, email, { offerGmailOnboarding = false } = {}) {
     state.token = token;
     state.email = email;
     localStorage.setItem("jt_token", token);
     localStorage.setItem("jt_email", email);
     showAppView();
+    if (offerGmailOnboarding) {
+      gmailOnboardingModal.hidden = false;
+    }
   }
 
   function signOut() {
@@ -360,6 +372,7 @@
     accountEmailEl.textContent = state.email || "account";
     loadDashboard();
     loadApplications();
+    loadGmailStatus();
   }
 
   // ---------- Account dropdown ----------
@@ -373,6 +386,76 @@
     statusPopover.hidden = true;
     statusFilterMenu.hidden = true;
   });
+
+  // ---------- Toast ----------
+  let toastTimeout;
+  function showToast(message, isError = false) {
+    clearTimeout(toastTimeout);
+    toastEl.textContent = message;
+    toastEl.classList.toggle("toast-error", isError);
+    toastEl.hidden = false;
+    toastTimeout = setTimeout(() => {
+      toastEl.hidden = true;
+    }, 4000);
+  }
+
+  // ---------- Gmail connect ----------
+  function setGmailConnected(connected) {
+    state.gmailConnected = connected;
+    connectGmailLabel.textContent = connected ? "Disconnect Gmail" : "Connect Gmail";
+    connectGmailBadge.hidden = !connected;
+  }
+
+  async function loadGmailStatus() {
+    try {
+      const data = await api("/gmail/status");
+      setGmailConnected(data.connected);
+    } catch (err) {
+      // non-critical, leave the button in its last known state
+    }
+  }
+
+  async function startGmailConnect() {
+    try {
+      const data = await api("/gmail/connect");
+      window.location.href = data.auth_url;
+    } catch (err) {
+      showToast(err.message, true);
+    }
+  }
+
+  connectGmailBtn.addEventListener("click", async () => {
+    accountDropdown.hidden = true;
+    if (state.gmailConnected) {
+      try {
+        await api("/gmail/disconnect", { method: "POST" });
+        setGmailConnected(false);
+        showToast("Gmail disconnected.");
+      } catch (err) {
+        showToast(err.message, true);
+      }
+    } else {
+      startGmailConnect();
+    }
+  });
+
+  gmailOnboardingSkip.addEventListener("click", () => {
+    gmailOnboardingModal.hidden = true;
+  });
+
+  gmailOnboardingConnect.addEventListener("click", () => {
+    gmailOnboardingModal.hidden = true;
+    startGmailConnect();
+  });
+
+  const gmailCallbackParam = new URLSearchParams(window.location.search);
+  if (gmailCallbackParam.has("gmail_connected")) {
+    window.history.replaceState({}, "", "/");
+    showToast("Gmail connected.");
+  } else if (gmailCallbackParam.has("gmail_connect_error")) {
+    window.history.replaceState({}, "", "/");
+    showToast("Couldn't connect Gmail. Try again from the account menu.", true);
+  }
 
   // ---------- Tabs ----------
   tabButtons.forEach((btn) => {
