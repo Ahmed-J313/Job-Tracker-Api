@@ -1,90 +1,34 @@
-# Job Tracker API
+# Prospect
 
-I made this to keep track of my job applications. You log where you applied and it keeps the status of each one (applied, interviewing, offer, rejected) .
+[![Tests](https://github.com/Ahmed-J313/Job-Tracker-Api/actions/workflows/test.yml/badge.svg)](https://github.com/Ahmed-J313/Job-Tracker-Api/actions/workflows/test.yml)
 
-## Setup, step by step
+**Live site: https://job-tracker-api-5m1v.onrender.com/**
 
-1. Install Docker Desktop: https://www.docker.com/products/docker-desktop/
-2. Open Docker Desktop and wait until it says it's running.
-3. Open a terminal. On Windows, search "PowerShell" in the start menu and open it. Everything below gets typed in there.
-4. Type `git clone https://github.com/Ahmed-J313/Job-Tracker-Api.git` and press Enter. Then type `cd Job-Tracker-Api` and press Enter.
-5. Type `docker compose up --build -d` and press Enter. First time takes a few minutes because it downloads Python. That's normal, just let it go.
-6. Type `docker compose ps` and press Enter. Check it says running.
-7. Type `python tracker.py` and press Enter. The first time it'll walk you through making an account.
+I made this to keep track of my job applications. Log where you applied and it keeps the status of each one (applied, interviewing, offer, rejected).
 
-Then you get a menu:
+## How to use it
 
-- **Add a job I applied to**
-- **See my applications**
-- **Update a job's status**
-- **See my stats**
+Go to the link above, make an account, start adding applications. Dashboard gives you the stats at a glance, Applications tab is where you add/edit stuff and move the status by clicking the pill. Forgot your password, there's a link for that on the sign in page.
 
-Press `q` when you're done. That's really it, no curl or anything.
+## Running it yourself
 
-When you're done for the day, run `docker compose down`. Your stuff is saved and it'll be there next time you start it.
+If you'd rather run it locally instead of using the hosted site:
 
-## Next time you open it
+1. Install Docker Desktop
+2. `git clone https://github.com/Ahmed-J313/Job-Tracker-Api.git` and `cd` into it
+3. `docker compose up --build -d`
+4. Open `http://localhost:5000`
 
-You don't need to build again. Just open Docker Desktop, open a terminal in this folder, and type:
+`docker compose down` when you're done, your data's still there next time you bring it back up.
 
-- `docker compose up -d`
-- `python tracker.py`
+There's also `tracker.py`, a CLI menu if you don't feel like using the browser. Run `python tracker.py` while the local server's up and it'll walk you through making an account.
 
-That's it.
-
-## Why is there a login if it's all on my computer?
-
-Right now you don't need it. It's there so I can host this on a server later and have multiple people use it without seeing each other's stuff. The script handles the login for you so you only deal with it once.
-
-## If you'd rather use curl
-
-Create an account:
-
-- `curl -X POST localhost:5000/api/auth/register -H 'Content-Type: application/json' -d '{"email":"you@example.com","password":"secret123"}'`
-
-Log in and save the token:
-
-- `TOKEN=$(curl -s -X POST localhost:5000/api/auth/login -H 'Content-Type: application/json' -d '{"email":"you@example.com","password":"secret123"}' | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")`
-
-Add a job:
-
-- `curl -X POST localhost:5000/api/applications -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"company":"Meow","role_title":"Software Engineer","platform":"Ashby"}'`
-
-See everything:
-
-- `curl localhost:5000/api/applications -H "Authorization: Bearer $TOKEN"`
-
-Only show interviews:
-
-- `curl "localhost:5000/api/applications?status=interviewing" -H "Authorization: Bearer $TOKEN"`
-
-Update one (this moves app #1 to offer):
-
-- `curl -X PUT localhost:5000/api/applications/1 -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"status":"offer"}'`
-
-Stats:
-
-- `curl localhost:5000/api/applications/stats -H "Authorization: Bearer $TOKEN"`
-
-## Without Docker
-
-Do this inside the project folder:
-
-- `python -m venv .venv && source .venv/bin/activate`
-- `pip install -r requirements.txt`
-- `flask --app app run`
+Without Docker: make a venv, `pip install -r requirements.txt`, set `DATABASE_URL` and `JWT_SECRET_KEY` env vars, then `flask --app app run`. Docker sets those two for you automatically, which is why it's the easier path.
 
 ## Tests
 
-- `pytest -v`
+`pytest -v`
 
-Tests cover login/register, adding and updating applications, making sure users can't see each other's stuff, bad input, filters, and stats.
+## Built with
 
-## What's in here
-
-Built with Flask, SQLAlchemy, JWT, SQLite, pytest, Docker.
-
-- `tracker.py` - the menu script, easiest way to use this
-- `app/` - the api code
-- `tests/` - tests
-- `SCOPE.md` / `DESIGN.md` - planning docs
+Flask, SQLAlchemy, Postgres (Neon), JWT auth, rate limiting, gunicorn, hosted on Render.
