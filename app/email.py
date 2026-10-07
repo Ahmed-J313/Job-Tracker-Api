@@ -36,6 +36,11 @@ def send_email(to_email, subject, html_body):
     try:
         with urllib.request.urlopen(req, timeout=10) as resp:
             resp.read()
+    except urllib.error.HTTPError as e:
+        # Resend puts the actual reason (bad key, unverified recipient, etc.)
+        # in the response body - the bare exception alone doesn't show it.
+        body = e.read().decode("utf-8", errors="replace")
+        print(f"[email send failed] {to_email}: HTTP {e.code}: {body}", flush=True)
     except urllib.error.URLError as e:
         # An email provider outage shouldn't break the password reset flow itself.
         print(f"[email send failed] {to_email}: {e}", flush=True)
