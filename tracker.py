@@ -215,7 +215,7 @@ def see_stats(token):
 
 
 def main():
-    print("=== Job Tracker ===")
+    print("=== Prospect ===")
     if not ensure_app_running():
         return
 
