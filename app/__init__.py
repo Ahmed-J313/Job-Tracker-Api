@@ -63,9 +63,11 @@ def create_app(config_overrides=None):
 
     from app.auth import auth_bp
     from app.applications import applications_bp
+    from app.gmail import gmail_bp
 
     app.register_blueprint(auth_bp, url_prefix="/api/auth")
     app.register_blueprint(applications_bp, url_prefix="/api/applications")
+    app.register_blueprint(gmail_bp, url_prefix="/api/gmail")
 
     @app.route("/")
     def index():
