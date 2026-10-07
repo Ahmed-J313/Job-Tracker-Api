@@ -23,8 +23,27 @@
 
   const loginForm = document.getElementById("login-form");
   const registerForm = document.getElementById("register-form");
+  const forgotForm = document.getElementById("forgot-form");
+  const resetForm = document.getElementById("reset-form");
   const loginError = document.getElementById("login-error");
   const registerError = document.getElementById("register-error");
+  const forgotError = document.getElementById("forgot-error");
+  const forgotMessage = document.getElementById("forgot-message");
+  const resetError = document.getElementById("reset-error");
+  const resetMessage = document.getElementById("reset-message");
+
+  const loginSubmitBtn = loginForm.querySelector('button[type="submit"]');
+  const registerSubmitBtn = registerForm.querySelector('button[type="submit"]');
+  const forgotSubmitBtn = forgotForm.querySelector('button[type="submit"]');
+  const resetSubmitBtn = resetForm.querySelector('button[type="submit"]');
+
+  const authTabsEl = document.querySelector(".auth-tabs");
+  const authOAuthSection = document.getElementById("auth-oauth-section");
+  const forgotPasswordLink = document.getElementById("forgot-password-link");
+  const backToLoginFromForgot = document.getElementById("back-to-login-from-forgot");
+  const backToLoginFromReset = document.getElementById("back-to-login-from-reset");
+
+  const urlToken = new URLSearchParams(window.location.search).get("token");
 
   const accountEmailEl = document.getElementById("account-email");
   const accountBtn = document.getElementById("account-btn");
@@ -120,15 +139,65 @@
   }
 
   // ---------- Auth view ----------
+  function setLoading(btn, isLoading, loadingText) {
+    if (isLoading) {
+      if (!btn.dataset.originalText) btn.dataset.originalText = btn.textContent;
+      btn.disabled = true;
+      btn.textContent = loadingText;
+    } else {
+      btn.disabled = false;
+      if (btn.dataset.originalText) btn.textContent = btn.dataset.originalText;
+    }
+  }
+
+  function showAuthSubview(view) {
+    loginForm.hidden = view !== "login";
+    registerForm.hidden = view !== "register";
+    forgotForm.hidden = view !== "forgot";
+    resetForm.hidden = view !== "reset";
+    authTabsEl.hidden = view === "forgot" || view === "reset";
+    authOAuthSection.hidden = view === "forgot" || view === "reset";
+    loginError.textContent = "";
+    registerError.textContent = "";
+    forgotError.textContent = "";
+    forgotMessage.textContent = "";
+    resetError.textContent = "";
+    resetMessage.textContent = "";
+  }
+
   document.querySelectorAll(".auth-tab-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
       document.querySelectorAll(".auth-tab-btn").forEach((b) => b.classList.remove("active"));
       btn.classList.add("active");
-      const target = btn.dataset.authTab;
-      loginForm.hidden = target !== "login";
-      registerForm.hidden = target !== "register";
-      loginError.textContent = "";
-      registerError.textContent = "";
+      showAuthSubview(btn.dataset.authTab);
+    });
+  });
+
+  function setActiveAuthTab(target) {
+    document.querySelectorAll(".auth-tab-btn").forEach((b) => {
+      b.classList.toggle("active", b.dataset.authTab === target);
+    });
+  }
+
+  forgotPasswordLink.addEventListener("click", () => showAuthSubview("forgot"));
+
+  backToLoginFromForgot.addEventListener("click", () => {
+    setActiveAuthTab("login");
+    showAuthSubview("login");
+  });
+
+  backToLoginFromReset.addEventListener("click", () => {
+    setActiveAuthTab("login");
+    window.history.replaceState({}, "", "/");
+    showAuthSubview("login");
+  });
+
+  document.querySelectorAll(".password-toggle-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const input = document.getElementById(btn.dataset.target);
+      const show = input.type === "password";
+      input.type = show ? "text" : "password";
+      btn.textContent = show ? "Hide" : "Show";
     });
   });
 
@@ -137,6 +206,7 @@
     loginError.textContent = "";
     const email = document.getElementById("login-email").value.trim();
     const password = document.getElementById("login-password").value;
+    setLoading(loginSubmitBtn, true, "Signing in...");
     try {
       const data = await api("/auth/login", {
         method: "POST",
@@ -145,6 +215,8 @@
       signIn(data.access_token, email);
     } catch (err) {
       loginError.textContent = err.message;
+    } finally {
+      setLoading(loginSubmitBtn, false);
     }
   });
 
@@ -153,10 +225,16 @@
     registerError.textContent = "";
     const email = document.getElementById("register-email").value.trim();
     const password = document.getElementById("register-password").value;
+    const confirmPassword = document.getElementById("register-confirm-password").value;
+    if (password !== confirmPassword) {
+      registerError.textContent = "Passwords do not match.";
+      return;
+    }
+    setLoading(registerSubmitBtn, true, "Creating account...");
     try {
       await api("/auth/register", {
         method: "POST",
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email, password, confirm_password: confirmPassword }),
       });
       const data = await api("/auth/login", {
         method: "POST",
@@ -165,6 +243,52 @@
       signIn(data.access_token, email);
     } catch (err) {
       registerError.textContent = err.message;
+    } finally {
+      setLoading(registerSubmitBtn, false);
+    }
+  });
+
+  forgotForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    forgotError.textContent = "";
+    forgotMessage.textContent = "";
+    const email = document.getElementById("forgot-email").value.trim();
+    setLoading(forgotSubmitBtn, true, "Sending...");
+    try {
+      const data = await api("/auth/forgot-password", {
+        method: "POST",
+        body: JSON.stringify({ email }),
+      });
+      forgotMessage.textContent = data.message;
+    } catch (err) {
+      forgotError.textContent = err.message;
+    } finally {
+      setLoading(forgotSubmitBtn, false);
+    }
+  });
+
+  resetForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    resetError.textContent = "";
+    resetMessage.textContent = "";
+    const newPassword = document.getElementById("reset-password").value;
+    const confirmPassword = document.getElementById("reset-confirm-password").value;
+    if (newPassword !== confirmPassword) {
+      resetError.textContent = "Passwords do not match.";
+      return;
+    }
+    setLoading(resetSubmitBtn, true, "Updating password...");
+    try {
+      const data = await api("/auth/reset-password", {
+        method: "POST",
+        body: JSON.stringify({ token: urlToken, new_password: newPassword }),
+      });
+      resetMessage.textContent = data.message;
+      resetForm.reset();
+    } catch (err) {
+      resetError.textContent = err.message;
+    } finally {
+      setLoading(resetSubmitBtn, false);
     }
   });
 
@@ -191,6 +315,8 @@
     localStorage.removeItem("jt_token");
     localStorage.removeItem("jt_email");
     showAuthView();
+    setActiveAuthTab("login");
+    showAuthSubview("login");
   }
 
   signoutBtn.addEventListener("click", signOut);
@@ -504,9 +630,13 @@
   });
 
   // ---------- Boot ----------
-  if (state.token) {
+  if (urlToken) {
+    showAuthView();
+    showAuthSubview("reset");
+  } else if (state.token) {
     showAppView();
   } else {
     showAuthView();
+    showAuthSubview("login");
   }
 })();
