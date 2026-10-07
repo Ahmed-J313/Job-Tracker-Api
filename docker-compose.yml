@@ -6,5 +6,6 @@ services:
     environment:
       - JWT_SECRET_KEY=dev-only-change-me
       - DATABASE_URL=sqlite:////app/data/job_tracker.db
+      - GOOGLE_CLIENT_ID=222177648321-8od1ljraspk684piohemie51sc0oafn2.apps.googleusercontent.com
     volumes:
       - ./data:/app/data
