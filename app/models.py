@@ -8,6 +8,8 @@ class User(db.Model):
     email = db.Column(db.String(255), unique=True, nullable=False, index=True)
     password_hash = db.Column(db.String(255), nullable=True)
     google_sub = db.Column(db.String(255), unique=True, nullable=True, index=True)
+    gmail_refresh_token_enc = db.Column(db.Text, nullable=True)
+    gmail_connected = db.Column(db.Boolean, nullable=False, default=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     applications = db.relationship(
