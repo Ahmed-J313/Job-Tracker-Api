@@ -186,11 +186,13 @@
     showAuthSubview("login");
   });
 
-  backToLoginFromReset.addEventListener("click", () => {
+  function returnToLoginAfterReset() {
     setActiveAuthTab("login");
     window.history.replaceState({}, "", "/");
     showAuthSubview("login");
-  });
+  }
+
+  backToLoginFromReset.addEventListener("click", returnToLoginAfterReset);
 
   document.querySelectorAll(".password-toggle-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
@@ -285,6 +287,7 @@
       });
       resetMessage.textContent = data.message;
       resetForm.reset();
+      setTimeout(returnToLoginAfterReset, 1500);
     } catch (err) {
       resetError.textContent = err.message;
     } finally {
