@@ -101,7 +101,7 @@
 
     const res = await fetch("/api" + path, Object.assign({}, options, { headers }));
 
-    if (res.status === 401) {
+    if (res.status === 401 && state.token) {
       signOut();
       throw new Error("Session expired, please sign in again.");
     }
