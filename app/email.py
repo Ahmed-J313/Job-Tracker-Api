@@ -30,6 +30,9 @@ def send_email(to_email, subject, html_body):
         headers={
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
+            # Cloudflare (in front of api.resend.com) blocks urllib's default
+            # "Python-urllib/x.y" user agent as bot traffic (error code 1010).
+            "User-Agent": "job-tracker-api/1.0",
         },
         method="POST",
     )
