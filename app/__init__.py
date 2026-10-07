@@ -69,11 +69,11 @@ def create_app(config_overrides=None):
 
     @app.route("/")
     def index():
-        return render_template("index.html")
+        return render_template("index.html", google_client_id=os.environ.get("GOOGLE_CLIENT_ID", ""))
 
     @app.route("/reset-password")
     def reset_password_page():
-        return render_template("index.html")
+        return render_template("index.html", google_client_id=os.environ.get("GOOGLE_CLIENT_ID", ""))
 
     @app.after_request
     def set_security_headers(response):
@@ -82,11 +82,12 @@ def create_app(config_overrides=None):
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; "
-            "script-src 'self'; "
-            "style-src 'self' https://fonts.googleapis.com; "
+            "script-src 'self' https://accounts.google.com; "
+            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://accounts.google.com; "
             "font-src 'self' https://fonts.gstatic.com; "
             "img-src 'self' data:; "
-            "connect-src 'self'"
+            "connect-src 'self' https://accounts.google.com; "
+            "frame-src https://accounts.google.com"
         )
         response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
         return response

@@ -227,27 +227,9 @@ input:focus, textarea:focus {
 
 .auth-divider span { padding: 0 10px; }
 
-.btn-google {
-  width: 100%;
+.google-signin-container {
   display: flex;
-  align-items: center;
   justify-content: center;
-  gap: 10px;
-  background: var(--white);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 11px 18px;
-  cursor: pointer;
-  color: var(--text);
-}
-
-.btn-google:hover { background: var(--cream); }
-
-.auth-footnote {
-  text-align: center;
-  color: var(--text-secondary);
-  font-size: 12px;
-  margin: 10px 0 0;
 }
 
 /* ---------- App shell ---------- */
