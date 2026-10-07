@@ -6,7 +6,8 @@ from app import db
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     email = db.Column(db.String(255), unique=True, nullable=False, index=True)
-    password_hash = db.Column(db.String(255), nullable=False)
+    password_hash = db.Column(db.String(255), nullable=True)
+    google_sub = db.Column(db.String(255), unique=True, nullable=True, index=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     applications = db.relationship(
