@@ -1,10 +1,26 @@
 def test_register_happy_path(client):
     resp = client.post(
         "/api/auth/register",
-        json={"email": "new@example.com", "password": "password123"},
+        json={
+            "email": "new@example.com",
+            "password": "password123",
+            "confirm_password": "password123",
+        },
     )
     assert resp.status_code == 201
     assert resp.get_json()["email"] == "new@example.com"
+
+
+def test_register_password_mismatch(client):
+    resp = client.post(
+        "/api/auth/register",
+        json={
+            "email": "new@example.com",
+            "password": "password123",
+            "confirm_password": "password456",
+        },
+    )
+    assert resp.status_code == 400
 
 
 def test_register_duplicate_email(client, user):
