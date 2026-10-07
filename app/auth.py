@@ -87,6 +87,7 @@ def google_signin():
     email_verified = idinfo.get("email_verified", False)
 
     user = User.query.filter_by(google_sub=google_sub).first()
+    is_new_user = False
     if not user:
         existing = User.query.filter_by(email=email).first() if email else None
         if existing:
@@ -99,10 +100,11 @@ def google_signin():
         else:
             user = User(email=email, google_sub=google_sub, password_hash=None)
             db.session.add(user)
+            is_new_user = True
         db.session.commit()
 
     token = create_access_token(identity=str(user.id))
-    return jsonify({"access_token": token, "email": user.email}), 200
+    return jsonify({"access_token": token, "email": user.email, "is_new_user": is_new_user}), 200
 
 
 @auth_bp.route("/forgot-password", methods=["POST"])

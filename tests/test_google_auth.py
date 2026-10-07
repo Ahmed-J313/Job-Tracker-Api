@@ -31,6 +31,7 @@ def test_google_signin_valid_token_creates_new_user(client, app):
     data = resp.get_json()
     assert "access_token" in data
     assert data["email"] == "newgoogleuser@example.com"
+    assert data["is_new_user"] is True
 
     with app.app_context():
         user = User.query.filter_by(google_sub="google-sub-123").first()
@@ -64,6 +65,7 @@ def test_google_signin_links_existing_verified_email(client, app, user):
         resp = client.post("/api/auth/google", json={"credential": "fake-token"})
 
     assert resp.status_code == 200
+    assert resp.get_json()["is_new_user"] is False
     with app.app_context():
         linked = User.query.filter_by(google_sub="google-sub-456").first()
         assert linked is not None
