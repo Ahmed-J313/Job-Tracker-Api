@@ -17,7 +17,7 @@ def send_email(to_email, subject, html_body):
 
     payload = json.dumps(
         {
-            "from": "Job Tracker <onboarding@resend.dev>",
+            "from": "Prospect <onboarding@resend.dev>",
             "to": [to_email],
             "subject": subject,
             "html": html_body,

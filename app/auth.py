@@ -4,7 +4,7 @@ import re
 import secrets
 from datetime import datetime, timedelta
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, render_template, request
 from flask_jwt_extended import create_access_token
 from werkzeug.security import check_password_hash, generate_password_hash
 
@@ -84,9 +84,8 @@ def forgot_password():
         reset_link = f"{base_url}/reset-password?token={raw_token}"
         send_email(
             user.email,
-            "Reset your Job Tracker password",
-            f"<p>Click the link below to reset your password. This link expires in 1 hour.</p>"
-            f'<p><a href="{reset_link}">{reset_link}</a></p>',
+            "Reset your password",
+            render_template("emails/password_reset.html", reset_url=reset_link),
         )
 
     # Same response whether or not the email is registered - don't leak that.
