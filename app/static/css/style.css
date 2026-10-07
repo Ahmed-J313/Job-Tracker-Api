@@ -304,11 +304,11 @@ input:focus, textarea:focus {
 .dropdown-item:disabled { color: var(--text-secondary); cursor: not-allowed; }
 .dropdown-item:disabled:hover { background: none; }
 
-.soon-tag {
+.connected-tag {
   font-size: 10px;
   text-transform: uppercase;
-  background: var(--border);
-  color: var(--text-secondary);
+  background: var(--tint-offer-bg);
+  color: var(--tint-offer-text);
   border-radius: 999px;
   padding: 2px 8px;
 }
@@ -659,6 +659,24 @@ input:focus, textarea:focus {
 #application-form { display: flex; flex-direction: column; gap: 16px; }
 
 .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 6px; }
+
+/* ---------- Toast ---------- */
+
+.toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: var(--navy);
+  color: var(--white);
+  border-radius: 12px;
+  padding: 14px 22px;
+  font-size: 14px;
+  box-shadow: var(--shadow-float);
+  z-index: 100;
+}
+
+.toast.toast-error { background-color: var(--color-danger); }
 
 /* ---------- Responsive ---------- */
 
