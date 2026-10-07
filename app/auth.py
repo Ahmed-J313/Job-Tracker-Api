@@ -6,6 +6,10 @@ from datetime import datetime, timedelta
 
 from flask import Blueprint, jsonify, render_template, request
 from flask_jwt_extended import create_access_token
+from google.auth import exceptions as google_auth_exceptions
+from google.auth.transport import requests as google_auth_request
+from google.oauth2 import id_token as google_id_token
+from jwt.exceptions import PyJWTError
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from app import db, limiter
@@ -54,11 +58,51 @@ def login():
     password = data.get("password") or ""
 
     user = User.query.filter_by(email=email).first()
-    if not user or not check_password_hash(user.password_hash, password):
+    if not user or not user.password_hash or not check_password_hash(user.password_hash, password):
         return jsonify({"error": "Invalid email or password"}), 401
 
     token = create_access_token(identity=str(user.id))
     return jsonify({"access_token": token}), 200
+
+
+@auth_bp.route("/google", methods=["POST"])
+@limiter.limit("5 per minute")
+def google_signin():
+    data = request.get_json(silent=True) or {}
+    credential = data.get("credential") or ""
+
+    client_id = os.environ.get("GOOGLE_CLIENT_ID")
+    if not client_id:
+        return jsonify({"error": "Google sign-in is not configured"}), 500
+
+    try:
+        idinfo = google_id_token.verify_oauth2_token(
+            credential, google_auth_request.Request(), client_id
+        )
+    except (PyJWTError, google_auth_exceptions.GoogleAuthError, ValueError):
+        return jsonify({"error": "Invalid Google credential"}), 401
+
+    google_sub = idinfo["sub"]
+    email = (idinfo.get("email") or "").strip().lower()
+    email_verified = idinfo.get("email_verified", False)
+
+    user = User.query.filter_by(google_sub=google_sub).first()
+    if not user:
+        existing = User.query.filter_by(email=email).first() if email else None
+        if existing:
+            if not email_verified:
+                return jsonify(
+                    {"error": "This email is already registered. Sign in with your password instead."}
+                ), 401
+            existing.google_sub = google_sub
+            user = existing
+        else:
+            user = User(email=email, google_sub=google_sub, password_hash=None)
+            db.session.add(user)
+        db.session.commit()
+
+    token = create_access_token(identity=str(user.id))
+    return jsonify({"access_token": token, "email": user.email}), 200
 
 
 @auth_bp.route("/forgot-password", methods=["POST"])
