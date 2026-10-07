@@ -73,7 +73,8 @@
 
   const statusPopover = document.getElementById("status-popover");
 
-  const googleBtn = document.getElementById("google-signin-btn");
+  const googleSigninContainer = document.getElementById("google-signin-container");
+  const GOOGLE_CLIENT_ID = document.body.dataset.googleClientId || "";
 
   const EMPTY_ICON_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
     <path d="M3 7l1.5-3h15L21 7" />
@@ -295,15 +296,38 @@
     }
   });
 
-  const googleBtnOriginal = googleBtn.innerHTML;
-  googleBtn.addEventListener("click", () => {
-    googleBtn.disabled = true;
-    googleBtn.textContent = "Coming soon";
-    setTimeout(() => {
-      googleBtn.disabled = false;
-      googleBtn.innerHTML = googleBtnOriginal;
-    }, 1200);
-  });
+  async function handleGoogleCredentialResponse(response) {
+    loginError.textContent = "";
+    try {
+      const data = await api("/auth/google", {
+        method: "POST",
+        body: JSON.stringify({ credential: response.credential }),
+      });
+      signIn(data.access_token, data.email);
+    } catch (err) {
+      loginError.textContent = err.message;
+    }
+  }
+
+  function initGoogleSignIn() {
+    if (!GOOGLE_CLIENT_ID || !window.google || !window.google.accounts) return;
+    google.accounts.id.initialize({
+      client_id: GOOGLE_CLIENT_ID,
+      callback: handleGoogleCredentialResponse,
+    });
+    google.accounts.id.renderButton(googleSigninContainer, {
+      theme: "outline",
+      size: "large",
+      width: 320,
+    });
+  }
+
+  if (window.google && window.google.accounts && window.google.accounts.id) {
+    initGoogleSignIn();
+  } else {
+    const gsiScript = document.getElementById("google-identity-script");
+    if (gsiScript) gsiScript.addEventListener("load", initGoogleSignIn);
+  }
 
   function signIn(token, email) {
     state.token = token;
