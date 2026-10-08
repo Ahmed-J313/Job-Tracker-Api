@@ -198,7 +198,9 @@ def sync():
             continue  # leave unprocessed, pick it up on the next sync
 
         result = analyze_email(email, applications)
-        db.session.add(ProcessedEmail(user_id=user.id, gmail_message_id=message_id))
+        db.session.add(
+            ProcessedEmail(user_id=user.id, gmail_message_id=message_id, thread_id=email.get("thread_id"))
+        )
 
         if result.confident and result.application_id and result.status:
             application = next((a for a in applications if a.id == result.application_id), None)
@@ -208,6 +210,7 @@ def sync():
                 and STATUS_RANK[result.status] >= STATUS_RANK[application.status]
             ):
                 application.status = result.status
+                application.sync_updated_at = datetime.utcnow()
                 updated.append(
                     {"application_id": application.id, "company": application.company, "status": result.status}
                 )
@@ -303,3 +306,44 @@ def create_application_from_review_item(item_id):
     item.resolved_at = datetime.utcnow()
     db.session.commit()
     return jsonify({"application": application.to_dict(), "review_item": item.to_dict()}), 201
+
+
+@gmail_bp.route("/review-items/bulk-create-applications", methods=["POST"])
+@jwt_required()
+def bulk_create_applications_from_review_items():
+    data = request.get_json(silent=True) or {}
+    item_ids = data.get("item_ids")
+    if not isinstance(item_ids, list) or not item_ids:
+        return jsonify({"error": "item_ids must be a non-empty list"}), 400
+
+    user_id = _current_user_id()
+    items_by_id = {
+        item.id: item
+        for item in EmailReviewItem.query.filter(
+            EmailReviewItem.id.in_(item_ids), EmailReviewItem.user_id == user_id
+        ).all()
+    }
+
+    created = 0
+    skipped_ids = []
+
+    for item_id in item_ids:
+        item = items_by_id.get(item_id)
+        if not item or item.kind != "new_application" or not item.suggested_company:
+            skipped_ids.append(item_id)
+            continue
+
+        db.session.add(
+            Application(
+                user_id=user_id,
+                company=item.suggested_company,
+                role_title=item.suggested_role or "Unknown",
+                status="applied",
+            )
+        )
+        item.resolution = "resolved"
+        item.resolved_at = datetime.utcnow()
+        created += 1
+
+    db.session.commit()
+    return jsonify({"created": created, "skipped_ids": skipped_ids}), 200

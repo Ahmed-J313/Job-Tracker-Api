@@ -127,7 +127,7 @@ def _get_client():
     return _client
 
 
-def llm_classify_and_match(subject, sender, snippet, applications):
+def llm_classify_and_match(subject, sender, body, applications):
     client = _get_client()
     if client is None:
         return None
@@ -141,7 +141,7 @@ def llm_classify_and_match(subject, sender, snippet, applications):
 Email:
 From: {sender}
 Subject: {subject}
-Preview: {snippet}
+Body: {body}
 
 Applications on file (id: company - role - current status):
 {application_list}
@@ -186,19 +186,24 @@ def analyze_email(email, applications):
     if status_confident and match_confident:
         return EmailResult(application.id, status, True, "Matched by company name and status keywords.")
 
-    analysis = llm_classify_and_match(email["subject"], email["sender"], email["snippet"], applications)
+    analysis = llm_classify_and_match(email["subject"], email["sender"], email["body"], applications)
     if analysis is None:
         return EmailResult(None, None, False, "Pattern match was ambiguous and LLM classification is not configured.")
 
+    # LLM-derived auto-actions require HIGH confidence - medium is a real
+    # signal, just not a trustworthy one, so it goes to review rather than
+    # being silently treated the same as "no signal at all."
+    if not status_confident:
+        if analysis.status is not None and analysis.status_confidence != "high":
+            return EmailResult(None, None, False, analysis.reason)
+        status = analysis.status if analysis.status_confidence == "high" else None
+
     if not match_confident:
-        if analysis.is_job_related and analysis.application_match_confidence != "low" and analysis.application_id is not None:
+        if analysis.is_job_related and analysis.application_match_confidence == "high" and analysis.application_id is not None:
             valid_ids = {a.id for a in applications}
             application = next((a for a in applications if a.id == analysis.application_id), None) if analysis.application_id in valid_ids else None
         else:
             application = None
-
-    if not status_confident:
-        status = analysis.status if analysis.status_confidence != "low" else None
 
     if application is None:
         if not analysis.is_job_related and analysis.application_match_confidence == "low":

@@ -30,6 +30,7 @@ class ProcessedEmail(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False, index=True)
     gmail_message_id = db.Column(db.String(64), nullable=False)
+    thread_id = db.Column(db.String(64), nullable=True)
     processed_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     __table_args__ = (
@@ -80,6 +81,7 @@ class Application(db.Model):
     date_applied = db.Column(db.Date, default=date.today)
     job_url = db.Column(db.String(1024))
     notes = db.Column(db.Text)
+    sync_updated_at = db.Column(db.DateTime, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -93,6 +95,7 @@ class Application(db.Model):
             "date_applied": self.date_applied.isoformat() if self.date_applied else None,
             "job_url": self.job_url,
             "notes": self.notes,
+            "sync_updated_at": self.sync_updated_at.isoformat() if self.sync_updated_at else None,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }

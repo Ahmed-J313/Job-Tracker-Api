@@ -365,3 +365,169 @@ def test_sync_creates_review_item_with_new_application_kind(client, app, gmail_c
         assert item.kind == "new_application"
         assert item.suggested_company == "Stripe"
         assert item.suggested_role == "Software Engineer, New Grad"
+
+
+def test_sync_persists_thread_id(client, app, gmail_connected_user, auth_headers):
+    with patch("app.gmail.refresh_access_token", return_value="fake-access-token"), patch(
+        "app.gmail.list_recent_message_ids", return_value=["msg1"]
+    ), patch(
+        "app.gmail.get_message_summary",
+        return_value={
+            "id": "msg1",
+            "thread_id": "thread-abc",
+            "subject": "Random",
+            "sender": "x@y.com",
+            "snippet": "hmm",
+            "body": "hmm",
+        },
+    ), patch(
+        "app.gmail.analyze_email",
+        return_value=EmailResult(application_id=None, status=None, confident=True, reason="unrelated"),
+    ):
+        resp = client.post("/api/gmail/sync", headers=auth_headers)
+
+    assert resp.status_code == 200
+    with app.app_context():
+        pe = ProcessedEmail.query.filter_by(gmail_message_id="msg1").first()
+        assert pe.thread_id == "thread-abc"
+
+
+def test_sync_sets_sync_updated_at_on_status_update(client, app, gmail_connected_user, auth_headers):
+    with app.app_context():
+        appn = Application(user_id=gmail_connected_user, company="Acme Corp", role_title="Engineer", status="applied")
+        _db.session.add(appn)
+        _db.session.commit()
+        app_id = appn.id
+
+    with patch("app.gmail.refresh_access_token", return_value="fake-access-token"), patch(
+        "app.gmail.list_recent_message_ids", return_value=["msg1"]
+    ), patch(
+        "app.gmail.get_message_summary",
+        return_value={
+            "id": "msg1",
+            "subject": "Acme Corp interview",
+            "sender": "hr@acme.com",
+            "snippet": "interview",
+        },
+    ), patch(
+        "app.gmail.analyze_email",
+        return_value=EmailResult(application_id=app_id, status="interviewing", confident=True, reason="clear"),
+    ):
+        resp = client.post("/api/gmail/sync", headers=auth_headers)
+
+    assert resp.status_code == 200
+    with app.app_context():
+        appn = _db.session.get(Application, app_id)
+        assert appn.status == "interviewing"
+        assert appn.sync_updated_at is not None
+
+
+def test_manual_status_edit_clears_sync_updated_at(client, app, gmail_connected_user, auth_headers):
+    with app.app_context():
+        appn = Application(user_id=gmail_connected_user, company="Acme Corp", role_title="Engineer", status="applied")
+        _db.session.add(appn)
+        _db.session.commit()
+        app_id = appn.id
+
+    with patch("app.gmail.refresh_access_token", return_value="fake-access-token"), patch(
+        "app.gmail.list_recent_message_ids", return_value=["msg1"]
+    ), patch(
+        "app.gmail.get_message_summary",
+        return_value={"id": "msg1", "subject": "Acme Corp interview", "sender": "hr@acme.com", "snippet": "interview"},
+    ), patch(
+        "app.gmail.analyze_email",
+        return_value=EmailResult(application_id=app_id, status="interviewing", confident=True, reason="clear"),
+    ):
+        client.post("/api/gmail/sync", headers=auth_headers)
+
+    with app.app_context():
+        assert _db.session.get(Application, app_id).sync_updated_at is not None
+
+    resp = client.put(
+        f"/api/applications/{app_id}",
+        headers=auth_headers,
+        json={"status": "offer"},
+    )
+    assert resp.status_code == 200
+    assert resp.get_json()["sync_updated_at"] is None
+
+    with app.app_context():
+        assert _db.session.get(Application, app_id).sync_updated_at is None
+
+
+# ---------- bulk-create-applications ----------
+
+
+def test_bulk_create_applications_mixed_valid_and_invalid_ids(client, app, user, auth_headers):
+    with app.app_context():
+        good1 = EmailReviewItem(
+            user_id=user, gmail_message_id="m1", reason="new app", kind="new_application",
+            suggested_company="Stripe", suggested_role="SWE",
+        )
+        good2 = EmailReviewItem(
+            user_id=user, gmail_message_id="m2", reason="new app", kind="new_application",
+            suggested_company="Noom", suggested_role="Backend Engineer",
+        )
+        ambiguous = EmailReviewItem(user_id=user, gmail_message_id="m3", reason="unsure")
+        other_users_item = EmailReviewItem(
+            user_id=user, gmail_message_id="m4", reason="new app", kind="new_application",
+            suggested_company="Globex", suggested_role="PM",
+        )
+        _db.session.add_all([good1, good2, ambiguous, other_users_item])
+        _db.session.commit()
+        good1_id, good2_id, ambiguous_id, other_item_id = good1.id, good2.id, ambiguous.id, other_users_item.id
+
+    nonexistent_id = other_item_id + 9999
+
+    resp = client.post(
+        "/api/gmail/review-items/bulk-create-applications",
+        headers=auth_headers,
+        json={"item_ids": [good1_id, good2_id, ambiguous_id, nonexistent_id]},
+    )
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["created"] == 2
+    assert sorted(data["skipped_ids"]) == sorted([ambiguous_id, nonexistent_id])
+
+    with app.app_context():
+        companies = {a.company for a in Application.query.filter_by(user_id=user).all()}
+        assert companies == {"Stripe", "Noom"}
+        assert _db.session.get(EmailReviewItem, good1_id).resolution == "resolved"
+        assert _db.session.get(EmailReviewItem, good2_id).resolution == "resolved"
+        assert _db.session.get(EmailReviewItem, ambiguous_id).resolution is None
+
+
+def test_bulk_create_applications_cannot_touch_other_users_items(client, app, user, other_auth_headers):
+    with app.app_context():
+        item = EmailReviewItem(
+            user_id=user, gmail_message_id="m1", reason="new app", kind="new_application",
+            suggested_company="Stripe", suggested_role="SWE",
+        )
+        _db.session.add(item)
+        _db.session.commit()
+        item_id = item.id
+
+    resp = client.post(
+        "/api/gmail/review-items/bulk-create-applications",
+        headers=other_auth_headers,
+        json={"item_ids": [item_id]},
+    )
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["created"] == 0
+    assert data["skipped_ids"] == [item_id]
+
+    with app.app_context():
+        assert _db.session.get(EmailReviewItem, item_id).resolution is None
+
+
+def test_bulk_create_applications_requires_auth(client):
+    resp = client.post("/api/gmail/review-items/bulk-create-applications", json={"item_ids": [1]})
+    assert resp.status_code == 401
+
+
+def test_bulk_create_applications_requires_item_ids(client, auth_headers):
+    resp = client.post(
+        "/api/gmail/review-items/bulk-create-applications", headers=auth_headers, json={}
+    )
+    assert resp.status_code == 400

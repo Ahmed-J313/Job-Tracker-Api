@@ -64,6 +64,10 @@
   const reviewItemsList = document.getElementById("review-items-list");
   const reviewEmptyState = document.getElementById("review-empty-state");
   const reviewBadge = document.getElementById("review-badge");
+  const reviewBulkBar = document.getElementById("review-bulk-bar");
+  const reviewBulkCount = document.getElementById("review-bulk-count");
+  const reviewBulkAddBtn = document.getElementById("review-bulk-add-btn");
+  const selectedSuggestionIds = new Set();
 
   const tabButtons = document.querySelectorAll(".tab-btn");
   const tabPanels = document.querySelectorAll(".tab-panel");
@@ -479,11 +483,22 @@
   });
 
   // ---------- Review ----------
+  function updateBulkBar() {
+    reviewBulkBar.hidden = selectedSuggestionIds.size === 0;
+    reviewBulkCount.textContent = `${selectedSuggestionIds.size} selected`;
+  }
+
   function renderReviewItems(items) {
     reviewItemsList.innerHTML = "";
     reviewEmptyState.hidden = items.length > 0;
     reviewBadge.hidden = items.length === 0;
     reviewBadge.textContent = String(items.length);
+
+    const liveIds = new Set(items.map((item) => item.id));
+    for (const id of Array.from(selectedSuggestionIds)) {
+      if (!liveIds.has(id)) selectedSuggestionIds.delete(id);
+    }
+    updateBulkBar();
 
     if (items.length === 0) {
       buildEmptyState(reviewEmptyState, {
@@ -530,10 +545,26 @@
       dismissBtn.addEventListener("click", () => resolveReviewItem(item.id, "dismiss"));
 
       if (item.kind === "new_application") {
+        const suggestionRow = document.createElement("div");
+        suggestionRow.className = "review-item-suggestion-row";
+
+        const checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.className = "review-item-checkbox";
+        checkbox.checked = selectedSuggestionIds.has(item.id);
+        checkbox.addEventListener("change", () => {
+          if (checkbox.checked) selectedSuggestionIds.add(item.id);
+          else selectedSuggestionIds.delete(item.id);
+          updateBulkBar();
+        });
+        suggestionRow.appendChild(checkbox);
+
         const suggestion = document.createElement("p");
         suggestion.className = "review-item-suggestion-label";
         suggestion.textContent = `Looks like a new application: ${item.suggested_company} - ${item.suggested_role}`;
-        li.appendChild(suggestion);
+        suggestionRow.appendChild(suggestion);
+
+        li.appendChild(suggestionRow);
 
         const addBtn = document.createElement("button");
         addBtn.type = "button";
@@ -580,6 +611,31 @@
       showToast(err.message, true);
     }
   }
+
+  reviewBulkAddBtn.addEventListener("click", async () => {
+    const itemIds = Array.from(selectedSuggestionIds);
+    if (itemIds.length === 0) return;
+    setLoading(reviewBulkAddBtn, true, "Adding...");
+    try {
+      const data = await api("/gmail/review-items/bulk-create-applications", {
+        method: "POST",
+        body: JSON.stringify({ item_ids: itemIds }),
+      });
+      selectedSuggestionIds.clear();
+      showToast(
+        data.skipped_ids.length
+          ? `Added ${data.created}, skipped ${data.skipped_ids.length}.`
+          : `Added ${data.created} application${data.created === 1 ? "" : "s"}.`
+      );
+      loadReviewItems();
+      loadApplications();
+      loadDashboard();
+    } catch (err) {
+      showToast(err.message, true);
+    } finally {
+      setLoading(reviewBulkAddBtn, false);
+    }
+  });
 
   syncGmailBtn.addEventListener("click", async () => {
     setLoading(syncGmailBtn, true, "Syncing...");
@@ -717,7 +773,17 @@
     apps.forEach((app) => {
       const tr = document.createElement("tr");
 
-      tr.appendChild(cell(app.company));
+      const companyTd = document.createElement("td");
+      companyTd.appendChild(document.createTextNode(app.company));
+      if (app.sync_updated_at) {
+        const syncedBadge = document.createElement("span");
+        syncedBadge.className = "synced-badge";
+        syncedBadge.textContent = "synced";
+        syncedBadge.title = "Last updated automatically by Gmail sync";
+        companyTd.appendChild(syncedBadge);
+      }
+      tr.appendChild(companyTd);
+
       tr.appendChild(cell(app.role_title));
       tr.appendChild(cell(app.platform || "—"));
 

@@ -114,6 +114,7 @@ def test_analyze_email_platform_sender_skips_without_llm_call():
         "subject": "Verify your Dice account",
         "sender": "Dice <no-reply@dice.com>",
         "snippet": "Please verify your candidate email.",
+        "body": "Please verify your candidate email.",
     }
     with patch("app.email_classifier.llm_classify_and_match") as mock_llm:
         result = analyze_email(email, [])
@@ -128,6 +129,7 @@ def test_analyze_email_interview_invite_from_untracked_employer_suggests_creatio
         "subject": "Elevate New York - Info Session Confirmation",
         "sender": "events@elevateny.org",
         "snippet": "You're registered for our upcoming info session.",
+        "body": "You're registered for our upcoming info session.",
     }
     apps = [FakeApplication(1, "Acme Corp", status="applied")]
     fake_analysis = EmailAnalysis(
@@ -154,6 +156,7 @@ def test_analyze_email_confident_pattern_match_skips_llm():
         "subject": "Acme Corp - Interview",
         "sender": "hr@acme.com",
         "snippet": "We'd like to schedule an interview with you.",
+        "body": "We'd like to schedule an interview with you.",
     }
     apps = [FakeApplication(1, "Acme Corp", status="applied")]
     with patch("app.email_classifier.llm_classify_and_match") as mock_llm:
@@ -165,7 +168,7 @@ def test_analyze_email_confident_pattern_match_skips_llm():
 
 
 def test_analyze_email_escalates_to_llm_when_ambiguous():
-    email = {"subject": "Following up", "sender": "someone@example.com", "snippet": "just checking in"}
+    email = {"subject": "Following up", "sender": "someone@example.com", "snippet": "just checking in", "body": "just checking in"}
     apps = [FakeApplication(1, "Acme Corp", status="applied")]
     fake_analysis = EmailAnalysis(
         is_job_related=True,
@@ -186,7 +189,7 @@ def test_analyze_email_escalates_to_llm_when_ambiguous():
 
 
 def test_analyze_email_confident_match_no_status_change_is_skipped_not_reviewed():
-    email = {"subject": "Re: your application", "sender": "hr@acme.com", "snippet": "We received your application."}
+    email = {"subject": "Re: your application", "sender": "hr@acme.com", "snippet": "We received your application.", "body": "We received your application."}
     apps = [FakeApplication(1, "Acme Corp", status="applied")]
     fake_analysis = EmailAnalysis(
         is_job_related=True,
@@ -207,7 +210,7 @@ def test_analyze_email_confident_match_no_status_change_is_skipped_not_reviewed(
 
 
 def test_analyze_email_llm_unconfident_goes_to_review():
-    email = {"subject": "re: update", "sender": "x@y.com", "snippet": "hmm"}
+    email = {"subject": "re: update", "sender": "x@y.com", "snippet": "hmm", "body": "hmm"}
     apps = [FakeApplication(1, "Acme Corp", status="applied")]
     fake_analysis = EmailAnalysis(
         is_job_related=True,
@@ -226,7 +229,7 @@ def test_analyze_email_llm_unconfident_goes_to_review():
 
 
 def test_analyze_email_llm_confidently_unrelated_skips_silently():
-    email = {"subject": "Your Amazon order", "sender": "no-reply@amazon.com", "snippet": "shipped"}
+    email = {"subject": "Your Amazon order", "sender": "no-reply@amazon.com", "snippet": "shipped", "body": "shipped"}
     apps = [FakeApplication(1, "Acme Corp", status="applied")]
     fake_analysis = EmailAnalysis(
         is_job_related=False,
@@ -247,7 +250,7 @@ def test_analyze_email_llm_confidently_unrelated_skips_silently():
 
 
 def test_analyze_email_new_application_confirmation_suggests_creation():
-    email = {"subject": "Thanks for applying to Stripe!", "sender": "no-reply@stripe.com", "snippet": "received"}
+    email = {"subject": "Thanks for applying to Stripe!", "sender": "no-reply@stripe.com", "snippet": "received", "body": "received"}
     apps = [FakeApplication(1, "Acme Corp", status="applied")]
     fake_analysis = EmailAnalysis(
         is_job_related=True,
@@ -269,7 +272,7 @@ def test_analyze_email_new_application_confirmation_suggests_creation():
 
 
 def test_analyze_email_new_application_confirmation_defaults_unknown_role():
-    email = {"subject": "We received your application", "sender": "no-reply@noom.com", "snippet": "received"}
+    email = {"subject": "We received your application", "sender": "no-reply@noom.com", "snippet": "received", "body": "received"}
     apps = []
     fake_analysis = EmailAnalysis(
         is_job_related=True,
@@ -289,15 +292,75 @@ def test_analyze_email_new_application_confirmation_defaults_unknown_role():
 
 
 def test_analyze_email_no_llm_configured_goes_to_review():
-    email = {"subject": "re: update", "sender": "x@y.com", "snippet": "hmm"}
+    email = {"subject": "re: update", "sender": "x@y.com", "snippet": "hmm", "body": "hmm"}
     apps = [FakeApplication(1, "Acme Corp", status="applied")]
     with patch("app.email_classifier.llm_classify_and_match", return_value=None):
         result = analyze_email(email, apps)
     assert result.confident is False
 
 
+def test_analyze_email_medium_match_confidence_goes_to_review_not_auto_update():
+    email = {"subject": "Update from Acme", "sender": "hr@acme.com", "snippet": "interview", "body": "interview"}
+    apps = [FakeApplication(1, "Acme Corp", status="applied")]
+    fake_analysis = EmailAnalysis(
+        is_job_related=True,
+        application_id=1,
+        application_match_confidence="medium",
+        status="interviewing",
+        status_confidence="high",
+        suggest_new_application=False,
+        suggested_company=None,
+        suggested_role=None,
+        reason="probably Acme Corp but not fully sure",
+    )
+    with patch("app.email_classifier.llm_classify_and_match", return_value=fake_analysis):
+        result = analyze_email(email, apps)
+    assert result.confident is False
+    assert result.application_id is None
+
+
+def test_analyze_email_medium_status_confidence_goes_to_review_not_auto_update():
+    email = {"subject": "Update from Acme", "sender": "hr@acme.com", "snippet": "interview", "body": "interview"}
+    apps = [FakeApplication(1, "Acme Corp", status="applied")]
+    fake_analysis = EmailAnalysis(
+        is_job_related=True,
+        application_id=1,
+        application_match_confidence="high",
+        status="interviewing",
+        status_confidence="medium",
+        suggest_new_application=False,
+        suggested_company=None,
+        suggested_role=None,
+        reason="sounds like an interview but wording is vague",
+    )
+    with patch("app.email_classifier.llm_classify_and_match", return_value=fake_analysis):
+        result = analyze_email(email, apps)
+    assert result.confident is False
+
+
+def test_analyze_email_high_confidence_both_auto_updates():
+    email = {"subject": "Update from Acme", "sender": "hr@acme.com", "snippet": "interview", "body": "interview"}
+    apps = [FakeApplication(1, "Acme Corp", status="applied")]
+    fake_analysis = EmailAnalysis(
+        is_job_related=True,
+        application_id=1,
+        application_match_confidence="high",
+        status="interviewing",
+        status_confidence="high",
+        suggest_new_application=False,
+        suggested_company=None,
+        suggested_role=None,
+        reason="clear match and clear signal",
+    )
+    with patch("app.email_classifier.llm_classify_and_match", return_value=fake_analysis):
+        result = analyze_email(email, apps)
+    assert result.confident is True
+    assert result.application_id == 1
+    assert result.status == "interviewing"
+
+
 def test_analyze_email_rejects_hallucinated_application_id():
-    email = {"subject": "re: update", "sender": "x@y.com", "snippet": "hmm"}
+    email = {"subject": "re: update", "sender": "x@y.com", "snippet": "hmm", "body": "hmm"}
     apps = [FakeApplication(1, "Acme Corp", status="applied")]
     fake_analysis = EmailAnalysis(
         is_job_related=True,

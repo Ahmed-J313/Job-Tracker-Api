@@ -457,7 +457,24 @@ input:focus, textarea:focus {
 .review-item-actions .btn-primary { padding: 7px 14px; font-size: 13px; }
 
 .review-item-suggestion { border-left: 3px solid var(--status-applied); padding-left: 13px; }
+.review-item-suggestion-row { display: flex; align-items: flex-start; gap: 8px; }
 .review-item-suggestion-label { font-size: 13px; font-weight: 600; color: var(--status-applied); margin: 0 0 10px; }
+.review-item-checkbox { margin-top: 3px; cursor: pointer; }
+
+.review-bulk-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  margin-bottom: 14px;
+  border-radius: 8px;
+  background-color: var(--tint-applied-bg);
+  color: var(--tint-applied-text);
+  font-size: 13px;
+  font-weight: 600;
+}
+.review-bulk-bar .btn-primary { padding: 7px 14px; font-size: 13px; }
 
 /* ---------- Applications tab ---------- */
 
@@ -561,6 +578,19 @@ input:focus, textarea:focus {
 .status-pill.status-rejected { background-color: var(--tint-rejected-bg); color: var(--tint-rejected-text); }
 
 .row-actions { display: flex; gap: 14px; white-space: nowrap; }
+
+.synced-badge {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  background-color: var(--tint-applied-bg);
+  color: var(--tint-applied-text);
+}
 
 .row-action-btn {
   background: none;

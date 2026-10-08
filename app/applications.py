@@ -130,6 +130,9 @@ def update_application(app_id):
         if field in data:
             setattr(application, field, data[field])
 
+    if "status" in data:
+        application.sync_updated_at = None
+
     if "date_applied" in data and data["date_applied"]:
         try:
             application.date_applied = _parse_date(data["date_applied"])
