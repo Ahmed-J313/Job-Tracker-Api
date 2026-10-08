@@ -46,6 +46,14 @@ def create_app(config_overrides=None):
 
     if app.config["SQLALCHEMY_DATABASE_URI"].startswith("postgresql"):
         print("Using Postgres")
+        # Neon's pooled endpoint can recycle a connection server-side without
+        # telling SQLAlchemy - pre_ping catches that before a query hits the
+        # dead connection, recycle proactively replaces ones that are old
+        # enough to be at risk.
+        app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
+            "pool_pre_ping": True,
+            "pool_recycle": 280,
+        }
     else:
         print("Using local SQLite")
 
