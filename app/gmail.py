@@ -1,5 +1,4 @@
 import os
-import resource
 from datetime import datetime
 from urllib.parse import urlencode
 
@@ -28,14 +27,6 @@ STATE_SALT = "gmail-connect-state"
 STATE_MAX_AGE_SECONDS = 600
 SYNC_BATCH_LIMIT = 20
 STATUS_RANK = {"applied": 0, "interviewing": 1, "offer": 2, "rejected": 2}
-
-
-def _log_mem(label):
-    # Render's free tier doesn't expose memory metrics, so this is the only
-    # way to see what /sync is actually doing on the box that's OOMing -
-    # temporary, pull it once we know what's going on.
-    rss_mb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024
-    print(f"[gmail sync][mem] {label}: {rss_mb:.1f} MB", flush=True)
 
 
 def _current_user_id():
@@ -158,7 +149,6 @@ def disconnect():
 @jwt_required()
 @limiter.limit("2 per minute")
 def sync():
-    _log_mem("start")
     user = db.session.get(User, _current_user_id())
     if not user.gmail_connected or not user.gmail_refresh_token_enc:
         return jsonify({"error": "Gmail is not connected"}), 400
@@ -174,7 +164,6 @@ def sync():
 
     try:
         access_token = refresh_access_token(refresh_token, client_id, client_secret)
-        _log_mem("after token refresh")
     except GmailReauthRequired:
         user.gmail_connected = False
         user.gmail_refresh_token_enc = None
@@ -185,7 +174,6 @@ def sync():
 
     try:
         message_ids = list_recent_message_ids(access_token)
-        _log_mem(f"after listing {len(message_ids)} message ids")
     except requests.RequestException:
         return jsonify({"error": "Could not reach Gmail"}), 502
 
@@ -196,7 +184,6 @@ def sync():
         .all()
     }
     new_ids = [m for m in message_ids if m not in already_processed][:SYNC_BATCH_LIMIT]
-    _log_mem(f"after dedup, {len(new_ids)} new to process")
 
     applications = Application.query.filter_by(user_id=user.id).all()
 
@@ -204,14 +191,13 @@ def sync():
     needs_review = 0
     skipped = 0
 
-    for i, message_id in enumerate(new_ids):
+    for message_id in new_ids:
         try:
             email = get_message_summary(access_token, message_id)
         except requests.RequestException:
             continue  # leave unprocessed, pick it up on the next sync
 
         result = analyze_email(email, applications)
-        _log_mem(f"after email {i + 1}/{len(new_ids)}")
         db.session.add(ProcessedEmail(user_id=user.id, gmail_message_id=message_id))
 
         if result.confident and result.application_id and result.status:
@@ -241,7 +227,6 @@ def sync():
             needs_review += 1
 
     db.session.commit()
-    _log_mem("after commit, before response")
 
     return (
         jsonify(
