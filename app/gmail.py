@@ -25,7 +25,7 @@ GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
 GMAIL_READONLY_SCOPE = "https://www.googleapis.com/auth/gmail.readonly"
 STATE_SALT = "gmail-connect-state"
 STATE_MAX_AGE_SECONDS = 600
-SYNC_BATCH_LIMIT = 50
+SYNC_BATCH_LIMIT = 20
 STATUS_RANK = {"applied": 0, "interviewing": 1, "offer": 2, "rejected": 2}
 
 

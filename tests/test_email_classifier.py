@@ -1,5 +1,8 @@
 from unittest.mock import MagicMock, patch
 
+import pytest
+
+import app.email_classifier as email_classifier
 from app.email_classifier import (
     EmailAnalysis,
     analyze_email,
@@ -7,6 +10,17 @@ from app.email_classifier import (
     pattern_classify_status,
     pattern_match_application,
 )
+
+
+@pytest.fixture(autouse=True)
+def reset_cached_client():
+    # llm_classify_and_match now caches the Anthropic client at module level
+    # (reused across calls in production) - reset it so each test's patch
+    # of anthropic.Anthropic actually takes effect instead of reusing
+    # whatever a previous test cached.
+    email_classifier._client = None
+    yield
+    email_classifier._client = None
 
 
 class FakeApplication:

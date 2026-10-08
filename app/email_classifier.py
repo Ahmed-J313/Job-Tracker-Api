@@ -72,12 +72,30 @@ class EmailAnalysis(BaseModel):
     reason: str
 
 
-def llm_classify_and_match(subject, sender, snippet, applications):
+_client = None
+
+
+def _get_client():
+    # Built once and reused for the life of the worker process, not once
+    # per email - a sync run can hit this dozens of times, and a fresh
+    # Anthropic() (own connection pool) per call adds up fast on a 512MB
+    # Render instance.
+    global _client
+    if _client is not None:
+        return _client
     api_key = os.environ.get("ANTHROPIC_API_KEY")
     if not api_key:
         return None
-
     from anthropic import Anthropic
+
+    _client = Anthropic(api_key=api_key)
+    return _client
+
+
+def llm_classify_and_match(subject, sender, snippet, applications):
+    client = _get_client()
+    if client is None:
+        return None
 
     application_list = "\n".join(
         f"{a.id}: {a.company} - {a.role_title} - currently {a.status}" for a in applications
@@ -104,7 +122,6 @@ Respond with:
 - reason: one sentence explaining your reasoning"""
 
     try:
-        client = Anthropic(api_key=api_key)
         response = client.messages.parse(
             model=CLAUDE_MODEL,
             max_tokens=300,
