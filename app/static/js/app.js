@@ -59,6 +59,12 @@
   const gmailOnboardingConnect = document.getElementById("gmail-onboarding-connect");
   const toastEl = document.getElementById("toast");
 
+  const syncGmailBtn = document.getElementById("sync-gmail-btn");
+  const syncGmailHint = document.getElementById("sync-gmail-hint");
+  const reviewItemsList = document.getElementById("review-items-list");
+  const reviewEmptyState = document.getElementById("review-empty-state");
+  const reviewBadge = document.getElementById("review-badge");
+
   const tabButtons = document.querySelectorAll(".tab-btn");
   const tabPanels = document.querySelectorAll(".tab-panel");
 
@@ -373,6 +379,7 @@
     loadDashboard();
     loadApplications();
     loadGmailStatus();
+    loadReviewItems();
   }
 
   // ---------- Account dropdown ----------
@@ -467,7 +474,107 @@
 
       if (btn.dataset.tab === "dashboard") loadDashboard();
       if (btn.dataset.tab === "applications") loadApplications();
+      if (btn.dataset.tab === "review") loadReviewItems();
     });
+  });
+
+  // ---------- Review ----------
+  function renderReviewItems(items) {
+    reviewItemsList.innerHTML = "";
+    reviewEmptyState.hidden = items.length > 0;
+    reviewBadge.hidden = items.length === 0;
+    reviewBadge.textContent = String(items.length);
+
+    if (items.length === 0) {
+      buildEmptyState(reviewEmptyState, {
+        title: "Nothing to review",
+        subtitle: "Emails Prospect isn't sure about will show up here.",
+      });
+      return;
+    }
+
+    items.forEach((item) => {
+      const li = document.createElement("li");
+      li.className = "review-item";
+
+      const subject = document.createElement("div");
+      subject.className = "review-item-subject";
+      subject.textContent = item.subject || "(no subject)";
+      li.appendChild(subject);
+
+      const meta = document.createElement("div");
+      meta.className = "review-item-meta";
+      meta.textContent = item.sender || "";
+      li.appendChild(meta);
+
+      if (item.snippet) {
+        const snippet = document.createElement("p");
+        snippet.className = "review-item-snippet";
+        snippet.textContent = item.snippet;
+        li.appendChild(snippet);
+      }
+
+      const reason = document.createElement("p");
+      reason.className = "review-item-reason";
+      reason.textContent = item.reason;
+      li.appendChild(reason);
+
+      const actions = document.createElement("div");
+      actions.className = "review-item-actions";
+
+      const dismissBtn = document.createElement("button");
+      dismissBtn.type = "button";
+      dismissBtn.className = "btn-secondary";
+      dismissBtn.textContent = "Dismiss";
+      dismissBtn.addEventListener("click", () => resolveReviewItem(item.id, "dismiss"));
+
+      const resolveBtn = document.createElement("button");
+      resolveBtn.type = "button";
+      resolveBtn.className = "btn-primary";
+      resolveBtn.textContent = "Mark resolved";
+      resolveBtn.addEventListener("click", () => resolveReviewItem(item.id, "resolve"));
+
+      actions.appendChild(dismissBtn);
+      actions.appendChild(resolveBtn);
+      li.appendChild(actions);
+
+      reviewItemsList.appendChild(li);
+    });
+  }
+
+  async function loadReviewItems() {
+    try {
+      const items = await api("/gmail/review-items");
+      renderReviewItems(items);
+    } catch (err) {
+      // non-critical, leave the list as-is
+    }
+  }
+
+  async function resolveReviewItem(id, action) {
+    try {
+      await api(`/gmail/review-items/${id}/${action}`, { method: "POST" });
+      loadReviewItems();
+    } catch (err) {
+      showToast(err.message, true);
+    }
+  }
+
+  syncGmailBtn.addEventListener("click", async () => {
+    setLoading(syncGmailBtn, true, "Syncing...");
+    syncGmailHint.textContent = "";
+    try {
+      const data = await api("/gmail/sync", { method: "POST" });
+      syncGmailHint.textContent =
+        `Scanned ${data.scanned} - ${data.updated.length} updated, ${data.needs_review} need review, ${data.skipped} skipped.`;
+      loadReviewItems();
+      loadDashboard();
+      loadApplications();
+    } catch (err) {
+      syncGmailHint.textContent = err.message;
+    } finally {
+      setLoading(syncGmailBtn, false);
+    }
   });
 
   // ---------- Dashboard ----------
