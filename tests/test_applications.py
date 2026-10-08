@@ -19,6 +19,24 @@ def test_create_application_missing_company(client, auth_headers):
     assert resp.status_code == 400
 
 
+def test_create_application_notes_too_long(client, auth_headers):
+    resp = client.post(
+        "/api/applications",
+        headers=auth_headers,
+        json={"company": "Acme", "role_title": "Engineer", "notes": "x" * 501},
+    )
+    assert resp.status_code == 400
+
+
+def test_create_application_notes_at_limit(client, auth_headers):
+    resp = client.post(
+        "/api/applications",
+        headers=auth_headers,
+        json={"company": "Acme", "role_title": "Engineer", "notes": "x" * 500},
+    )
+    assert resp.status_code == 201
+
+
 def test_create_application_requires_auth(client):
     resp = client.post(
         "/api/applications",
@@ -55,6 +73,15 @@ def test_update_application_invalid_status(client, auth_headers, seeded_applicat
         f"/api/applications/{seeded_applications[0]}",
         headers=auth_headers,
         json={"status": "ghosted"},
+    )
+    assert resp.status_code == 400
+
+
+def test_update_application_notes_too_long(client, auth_headers, seeded_applications):
+    resp = client.put(
+        f"/api/applications/{seeded_applications[0]}",
+        headers=auth_headers,
+        json={"notes": "x" * 501},
     )
     assert resp.status_code == 400
 

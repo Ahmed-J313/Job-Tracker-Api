@@ -9,6 +9,7 @@ from app.models import Application
 applications_bp = Blueprint("applications", __name__)
 
 VALID_STATUSES = {"applied", "interviewing", "offer", "rejected"}
+MAX_NOTES_LENGTH = 500
 
 
 def _current_user_id():
@@ -71,6 +72,10 @@ def create_application():
     if status not in VALID_STATUSES:
         return jsonify({"error": f"status must be one of {sorted(VALID_STATUSES)}"}), 400
 
+    notes = data.get("notes")
+    if notes and len(notes) > MAX_NOTES_LENGTH:
+        return jsonify({"error": f"notes must be {MAX_NOTES_LENGTH} characters or fewer"}), 400
+
     date_applied = date.today()
     if data.get("date_applied"):
         try:
@@ -86,7 +91,7 @@ def create_application():
         status=status,
         date_applied=date_applied,
         job_url=data.get("job_url"),
-        notes=data.get("notes"),
+        notes=notes,
     )
     db.session.add(application)
     db.session.commit()
@@ -118,6 +123,8 @@ def update_application(app_id):
         return jsonify({"error": "company cannot be empty"}), 400
     if "role_title" in data and not (data["role_title"] or "").strip():
         return jsonify({"error": "role_title cannot be empty"}), 400
+    if "notes" in data and data["notes"] and len(data["notes"]) > MAX_NOTES_LENGTH:
+        return jsonify({"error": f"notes must be {MAX_NOTES_LENGTH} characters or fewer"}), 400
 
     for field in ("company", "role_title", "platform", "status", "job_url", "notes"):
         if field in data:

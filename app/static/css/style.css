@@ -138,6 +138,8 @@ input:focus, textarea:focus {
   box-shadow: 0 0 0 3px rgba(30, 58, 95, 0.08);
 }
 
+#form-notes { resize: none; }
+
 .form-hint { margin: -6px 0 0; font-size: 12px; color: var(--text-secondary); }
 .form-error { margin: 0; font-size: 13px; color: var(--color-danger); min-height: 16px; }
 .form-success { margin: 0; font-size: 13px; color: var(--status-offer); min-height: 16px; }
@@ -704,5 +706,5 @@ input:focus, textarea:focus {
 @media (max-width: 640px) {
   .stat-cards { grid-template-columns: repeat(2, 1fr); }
   .applications-toolbar { flex-direction: column; align-items: stretch; }
-  .search-input { order: 3; }
+  .search-input { order: 3; flex: 1 1 auto; }
 }

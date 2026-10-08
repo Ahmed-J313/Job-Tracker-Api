@@ -3,6 +3,26 @@ import requests
 GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
 GMAIL_API_BASE = "https://gmail.googleapis.com/gmail/v1/users/me"
 
+# Broad on purpose - this just keeps obviously-irrelevant mail (newsletters,
+# receipts, personal mail) away from the classifier entirely. Patterns and
+# Haiku still do the real filtering on whatever matches here.
+JOB_RELATED_TERMS = (
+    "interview",
+    "interviewing",
+    "application",
+    "applied",
+    "offer",
+    "recruiter",
+    "recruiting",
+    "hiring",
+    "candidate",
+    "position",
+    "onsite",
+    '"phone screen"',
+    '"next steps"',
+)
+DEFAULT_SYNC_QUERY = "in:inbox newer_than:30d (" + " OR ".join(JOB_RELATED_TERMS) + ")"
+
 
 class GmailReauthRequired(Exception):
     """Raised when Google rejects the refresh token itself (invalid_grant)."""
@@ -30,7 +50,7 @@ def refresh_access_token(refresh_token, client_id, client_secret):
     return resp.json()["access_token"]
 
 
-def list_recent_message_ids(access_token, query="in:inbox newer_than:30d", max_results=50):
+def list_recent_message_ids(access_token, query=DEFAULT_SYNC_QUERY, max_results=50):
     resp = requests.get(
         f"{GMAIL_API_BASE}/messages",
         headers={"Authorization": f"Bearer {access_token}"},
