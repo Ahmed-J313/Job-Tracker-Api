@@ -6,6 +6,7 @@ import app.email_classifier as email_classifier
 from app.email_classifier import (
     EmailAnalysis,
     analyze_email,
+    is_platform_sender,
     llm_classify_and_match,
     pattern_classify_status,
     pattern_match_application,
@@ -78,7 +79,74 @@ def test_pattern_match_application_multiple():
     assert confident is False
 
 
+# ---------- is_platform_sender ----------
+
+
+def test_is_platform_sender_bare_address():
+    assert is_platform_sender("no-reply@dice.com") is True
+
+
+def test_is_platform_sender_name_and_address():
+    assert is_platform_sender("Dice <no-reply@dice.com>") is True
+
+
+def test_is_platform_sender_subdomain():
+    assert is_platform_sender("alerts@connect.dice.com") is True
+
+
+def test_is_platform_sender_ats_domain_not_platform():
+    assert is_platform_sender("Acme Corp <no-reply@greenhouse.io>") is False
+
+
+def test_is_platform_sender_direct_employer():
+    assert is_platform_sender("hr@acme.com") is False
+
+
+def test_is_platform_sender_missing_address():
+    assert is_platform_sender("not an email address") is False
+
+
 # ---------- analyze_email ----------
+
+
+def test_analyze_email_platform_sender_skips_without_llm_call():
+    email = {
+        "subject": "Verify your Dice account",
+        "sender": "Dice <no-reply@dice.com>",
+        "snippet": "Please verify your candidate email.",
+    }
+    with patch("app.email_classifier.llm_classify_and_match") as mock_llm:
+        result = analyze_email(email, [])
+    mock_llm.assert_not_called()
+    assert result.confident is True
+    assert result.application_id is None
+    assert result.status is None
+
+
+def test_analyze_email_interview_invite_from_untracked_employer_suggests_creation():
+    email = {
+        "subject": "Elevate New York - Info Session Confirmation",
+        "sender": "events@elevateny.org",
+        "snippet": "You're registered for our upcoming info session.",
+    }
+    apps = [FakeApplication(1, "Acme Corp", status="applied")]
+    fake_analysis = EmailAnalysis(
+        is_job_related=True,
+        application_id=None,
+        application_match_confidence="low",
+        status=None,
+        status_confidence="low",
+        suggest_new_application=True,
+        suggested_company="Elevate New York",
+        suggested_role=None,
+        reason="employer-hosted info session the person registered for, not on file",
+    )
+    with patch("app.email_classifier.llm_classify_and_match", return_value=fake_analysis):
+        result = analyze_email(email, apps)
+    assert result.confident is False
+    assert result.application_id is None
+    assert result.suggested_company == "Elevate New York"
+    assert result.suggested_role == "Unknown"
 
 
 def test_analyze_email_confident_pattern_match_skips_llm():
@@ -105,7 +173,7 @@ def test_analyze_email_escalates_to_llm_when_ambiguous():
         application_match_confidence="high",
         status="interviewing",
         status_confidence="high",
-        is_new_application_confirmation=False,
+        suggest_new_application=False,
         suggested_company=None,
         suggested_role=None,
         reason="mentions interview",
@@ -126,7 +194,7 @@ def test_analyze_email_confident_match_no_status_change_is_skipped_not_reviewed(
         application_match_confidence="high",
         status=None,
         status_confidence="low",
-        is_new_application_confirmation=False,
+        suggest_new_application=False,
         suggested_company=None,
         suggested_role=None,
         reason="confirms receipt, no status signal",
@@ -147,7 +215,7 @@ def test_analyze_email_llm_unconfident_goes_to_review():
         application_match_confidence="low",
         status=None,
         status_confidence="low",
-        is_new_application_confirmation=False,
+        suggest_new_application=False,
         suggested_company=None,
         suggested_role=None,
         reason="not sure",
@@ -166,7 +234,7 @@ def test_analyze_email_llm_confidently_unrelated_skips_silently():
         application_match_confidence="low",
         status=None,
         status_confidence="low",
-        is_new_application_confirmation=False,
+        suggest_new_application=False,
         suggested_company=None,
         suggested_role=None,
         reason="unrelated receipt",
@@ -187,7 +255,7 @@ def test_analyze_email_new_application_confirmation_suggests_creation():
         application_match_confidence="low",
         status="applied",
         status_confidence="high",
-        is_new_application_confirmation=True,
+        suggest_new_application=True,
         suggested_company="Stripe",
         suggested_role="Software Engineer, New Grad",
         reason="confirms a new application to Stripe, not on file",
@@ -209,7 +277,7 @@ def test_analyze_email_new_application_confirmation_defaults_unknown_role():
         application_match_confidence="low",
         status="applied",
         status_confidence="high",
-        is_new_application_confirmation=True,
+        suggest_new_application=True,
         suggested_company="Noom",
         suggested_role=None,
         reason="confirms a new application to Noom, role not stated",
@@ -237,7 +305,7 @@ def test_analyze_email_rejects_hallucinated_application_id():
         application_match_confidence="high",
         status="interviewing",
         status_confidence="high",
-        is_new_application_confirmation=False,
+        suggest_new_application=False,
         suggested_company=None,
         suggested_role=None,
         reason="hallucinated",
@@ -264,7 +332,7 @@ def test_llm_classify_and_match_calls_anthropic(monkeypatch):
         application_match_confidence="low",
         status=None,
         status_confidence="low",
-        is_new_application_confirmation=False,
+        suggest_new_application=False,
         suggested_company=None,
         suggested_role=None,
         reason="x",

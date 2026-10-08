@@ -7,6 +7,18 @@ from pydantic import BaseModel
 
 CLAUDE_MODEL = "claude-haiku-4-5"
 
+PLATFORM_SENDER_DOMAINS = {
+    "dice.com",
+    "indeed.com",
+    "linkedin.com",
+    "ziprecruiter.com",
+    "glassdoor.com",
+    "monster.com",
+    "simplyhired.com",
+    "careerbuilder.com",
+    "jobcase.com",
+}
+
 STATUS_KEYWORDS = {
     "rejected": [
         "unfortunately",
@@ -65,13 +77,31 @@ def pattern_match_application(text, applications):
     return None, False
 
 
+def _sender_domain(sender):
+    # Handles both "Name <addr@domain.com>" and a bare "addr@domain.com".
+    match = re.search(r"@([\w.-]+)", sender or "")
+    return match.group(1).lower() if match else None
+
+
+def is_platform_sender(sender):
+    domain = _sender_domain(sender)
+    if not domain:
+        return False
+    domain_parts = domain.split(".")
+    for platform in PLATFORM_SENDER_DOMAINS:
+        platform_parts = platform.split(".")
+        if domain_parts[-len(platform_parts):] == platform_parts:
+            return True
+    return False
+
+
 class EmailAnalysis(BaseModel):
     is_job_related: bool
     application_id: Optional[int]
     application_match_confidence: Literal["high", "medium", "low"]
     status: Optional[Literal["applied", "interviewing", "offer", "rejected"]]
     status_confidence: Literal["high", "medium", "low"]
-    is_new_application_confirmation: bool
+    suggest_new_application: bool
     suggested_company: Optional[str]
     suggested_role: Optional[str]
     reason: str
@@ -118,7 +148,7 @@ Applications on file (id: company - role - current status):
 
 Status changes only ever move forward: applied -> interviewing -> offer OR rejected. Never suggest moving an application backward, and never suggest a status change for an application that's already offer or rejected.
 
-If this doesn't match any application on file, decide separately whether it's a direct confirmation that the person just applied somewhere new (e.g. "we received your application", "thanks for applying") as opposed to something else job-related but not actionable (a newsletter, a job recommendation, a platform signup notice, etc).
+If this doesn't match any application on file, decide separately whether it represents a real hiring-process touchpoint with a specific employer not on file - an application confirmation, an interview invite or scheduled interview, a rejection, an offer, or an employer-hosted event/info session the person registered for - as opposed to something that isn't tied to a specific employer's hiring process (a job platform/board notification, a newsletter, a job alert digest, or recruiter cold outreach).
 
 Respond with:
 - is_job_related: true only if this is clearly about one of these applications or the person's job search
@@ -126,9 +156,9 @@ Respond with:
 - application_match_confidence: how confident you are in that match
 - status: what this email signals about status, or null if it doesn't indicate one
 - status_confidence: how confident you are in that status signal
-- is_new_application_confirmation: true only if application_id is null AND this is a direct confirmation of a brand new application, not already on file
-- suggested_company: if is_new_application_confirmation is true, the company this application is for, otherwise null
-- suggested_role: if is_new_application_confirmation is true, your best guess at the role/title mentioned, or "Unknown" if it's not stated - otherwise null
+- suggest_new_application: true only if application_id is null AND this is a real hiring-process touchpoint with a specific employer not on file (application confirmation, interview, rejection, offer, or a hiring event/info session) - false for job platforms/boards, newsletters, job alerts, or recruiter cold outreach
+- suggested_company: if suggest_new_application is true, the employer's name, otherwise null
+- suggested_role: if suggest_new_application is true, your best guess at the role/title mentioned, or "Unknown" if it's not stated - otherwise null
 - reason: one sentence explaining your reasoning"""
 
     try:
@@ -145,6 +175,9 @@ Respond with:
 
 
 def analyze_email(email, applications):
+    if is_platform_sender(email["sender"]):
+        return EmailResult(None, None, True, "Job platform notification, not an employer email.")
+
     text = f"{email['subject']} {email['snippet']}"
 
     status, status_confident = pattern_classify_status(text)
@@ -170,7 +203,7 @@ def analyze_email(email, applications):
     if application is None:
         if not analysis.is_job_related and analysis.application_match_confidence == "low":
             return EmailResult(None, None, True, "Not related to any application on file.")
-        if analysis.is_new_application_confirmation and analysis.suggested_company:
+        if analysis.suggest_new_application and analysis.suggested_company:
             return EmailResult(
                 None,
                 None,
