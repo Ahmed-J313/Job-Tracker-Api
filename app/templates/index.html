@@ -126,6 +126,9 @@
     <nav class="tabs">
       <button type="button" class="tab-btn active" data-tab="dashboard">Dashboard</button>
       <button type="button" class="tab-btn" data-tab="applications">Applications</button>
+      <button type="button" class="tab-btn" data-tab="review">
+        Review <span id="review-badge" class="connected-tag" hidden>0</span>
+      </button>
     </nav>
 
     <main class="tab-content">
@@ -195,6 +198,20 @@
             <tbody id="applications-tbody"></tbody>
           </table>
           <div id="empty-state" class="empty-state" hidden></div>
+        </div>
+      </section>
+
+      <section id="tab-review" class="tab-panel">
+        <div class="section-header">
+          <h1 class="page-title">Review</h1>
+          <button type="button" id="sync-gmail-btn" class="btn-primary">Sync Gmail now</button>
+        </div>
+        <p class="form-hint" id="sync-gmail-hint"></p>
+
+        <div class="card">
+          <h2 class="card-title">Needs your input</h2>
+          <ul id="review-items-list" class="review-list"></ul>
+          <div id="review-empty-state" class="empty-state empty-state--inline" hidden></div>
         </div>
       </section>
     </main>
