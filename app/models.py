@@ -26,6 +26,42 @@ class PasswordResetToken(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 
+class ProcessedEmail(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False, index=True)
+    gmail_message_id = db.Column(db.String(64), nullable=False)
+    processed_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        db.UniqueConstraint("user_id", "gmail_message_id", name="uq_processed_email_user_message"),
+    )
+
+
+class EmailReviewItem(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False, index=True)
+    gmail_message_id = db.Column(db.String(64), nullable=False)
+    subject = db.Column(db.String(998))
+    snippet = db.Column(db.Text)
+    sender = db.Column(db.String(255))
+    reason = db.Column(db.Text, nullable=False)
+    resolution = db.Column(db.String(16))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    resolved_at = db.Column(db.DateTime)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "gmail_message_id": self.gmail_message_id,
+            "subject": self.subject,
+            "snippet": self.snippet,
+            "sender": self.sender,
+            "reason": self.reason,
+            "resolution": self.resolution,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
 class Application(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(
