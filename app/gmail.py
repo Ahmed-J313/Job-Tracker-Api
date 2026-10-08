@@ -1,4 +1,5 @@
 import os
+from datetime import datetime
 from urllib.parse import urlencode
 
 import requests
@@ -7,8 +8,15 @@ from flask_jwt_extended import get_jwt_identity, jwt_required
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
 from app import db, limiter
-from app.crypto import TokenEncryptionNotConfigured, encrypt_token
-from app.models import User
+from app.crypto import TokenEncryptionNotConfigured, decrypt_token, encrypt_token
+from app.email_classifier import analyze_email
+from app.gmail_client import (
+    GmailReauthRequired,
+    get_message_summary,
+    list_recent_message_ids,
+    refresh_access_token,
+)
+from app.models import Application, EmailReviewItem, ProcessedEmail, User
 
 gmail_bp = Blueprint("gmail", __name__)
 
@@ -17,6 +25,8 @@ GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
 GMAIL_READONLY_SCOPE = "https://www.googleapis.com/auth/gmail.readonly"
 STATE_SALT = "gmail-connect-state"
 STATE_MAX_AGE_SECONDS = 600
+SYNC_BATCH_LIMIT = 50
+STATUS_RANK = {"applied": 0, "interviewing": 1, "offer": 2, "rejected": 2}
 
 
 def _current_user_id():
@@ -133,3 +143,138 @@ def disconnect():
     user.gmail_connected = False
     db.session.commit()
     return jsonify({"connected": False}), 200
+
+
+@gmail_bp.route("/sync", methods=["POST"])
+@jwt_required()
+@limiter.limit("2 per minute")
+def sync():
+    user = db.session.get(User, _current_user_id())
+    if not user.gmail_connected or not user.gmail_refresh_token_enc:
+        return jsonify({"error": "Gmail is not connected"}), 400
+
+    refresh_token = decrypt_token(user.gmail_refresh_token_enc)
+    if refresh_token is None:
+        return jsonify({"error": "Stored Gmail credentials are invalid, please reconnect"}), 400
+
+    client_id = os.environ.get("GOOGLE_CLIENT_ID")
+    client_secret = os.environ.get("GOOGLE_CLIENT_SECRET")
+    if not client_id or not client_secret:
+        return jsonify({"error": "Gmail sync is not configured"}), 500
+
+    try:
+        access_token = refresh_access_token(refresh_token, client_id, client_secret)
+    except GmailReauthRequired:
+        user.gmail_connected = False
+        user.gmail_refresh_token_enc = None
+        db.session.commit()
+        return jsonify({"error": "Gmail connection expired, please reconnect"}), 400
+    except requests.RequestException:
+        return jsonify({"error": "Could not reach Google to refresh the Gmail connection"}), 502
+
+    try:
+        message_ids = list_recent_message_ids(access_token)
+    except requests.RequestException:
+        return jsonify({"error": "Could not reach Gmail"}), 502
+
+    already_processed = {
+        pe.gmail_message_id
+        for pe in ProcessedEmail.query.filter_by(user_id=user.id)
+        .filter(ProcessedEmail.gmail_message_id.in_(message_ids))
+        .all()
+    }
+    new_ids = [m for m in message_ids if m not in already_processed][:SYNC_BATCH_LIMIT]
+
+    applications = Application.query.filter_by(user_id=user.id).all()
+
+    updated = []
+    needs_review = 0
+    skipped = 0
+
+    for message_id in new_ids:
+        try:
+            email = get_message_summary(access_token, message_id)
+        except requests.RequestException:
+            continue  # leave unprocessed, pick it up on the next sync
+
+        result = analyze_email(email, applications)
+        db.session.add(ProcessedEmail(user_id=user.id, gmail_message_id=message_id))
+
+        if result.confident and result.application_id and result.status:
+            application = next((a for a in applications if a.id == result.application_id), None)
+            if (
+                application
+                and application.status not in ("offer", "rejected")
+                and STATUS_RANK[result.status] >= STATUS_RANK[application.status]
+            ):
+                application.status = result.status
+                updated.append(
+                    {"application_id": application.id, "company": application.company, "status": result.status}
+                )
+        elif result.confident:
+            skipped += 1
+        else:
+            db.session.add(
+                EmailReviewItem(
+                    user_id=user.id,
+                    gmail_message_id=message_id,
+                    subject=email["subject"],
+                    snippet=email["snippet"],
+                    sender=email["sender"],
+                    reason=result.reason,
+                )
+            )
+            needs_review += 1
+
+    db.session.commit()
+
+    return (
+        jsonify(
+            {
+                "scanned": len(new_ids),
+                "updated": updated,
+                "needs_review": needs_review,
+                "skipped": skipped,
+            }
+        ),
+        200,
+    )
+
+
+@gmail_bp.route("/review-items", methods=["GET"])
+@jwt_required()
+def list_review_items():
+    items = (
+        EmailReviewItem.query.filter_by(user_id=_current_user_id(), resolution=None)
+        .order_by(EmailReviewItem.created_at.desc())
+        .all()
+    )
+    return jsonify([item.to_dict() for item in items]), 200
+
+
+def _get_owned_review_item(item_id):
+    return EmailReviewItem.query.filter_by(id=item_id, user_id=_current_user_id()).first()
+
+
+@gmail_bp.route("/review-items/<int:item_id>/dismiss", methods=["POST"])
+@jwt_required()
+def dismiss_review_item(item_id):
+    item = _get_owned_review_item(item_id)
+    if not item:
+        return jsonify({"error": "Review item not found"}), 404
+    item.resolution = "dismissed"
+    item.resolved_at = datetime.utcnow()
+    db.session.commit()
+    return jsonify(item.to_dict()), 200
+
+
+@gmail_bp.route("/review-items/<int:item_id>/resolve", methods=["POST"])
+@jwt_required()
+def resolve_review_item(item_id):
+    item = _get_owned_review_item(item_id)
+    if not item:
+        return jsonify({"error": "Review item not found"}), 404
+    item.resolution = "resolved"
+    item.resolved_at = datetime.utcnow()
+    db.session.commit()
+    return jsonify(item.to_dict()), 200
