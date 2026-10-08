@@ -41,6 +41,8 @@ class EmailResult:
     status: Optional[str]
     confident: bool
     reason: str
+    suggested_company: Optional[str] = None
+    suggested_role: Optional[str] = None
 
 
 def _normalize(text):
@@ -69,6 +71,9 @@ class EmailAnalysis(BaseModel):
     application_match_confidence: Literal["high", "medium", "low"]
     status: Optional[Literal["applied", "interviewing", "offer", "rejected"]]
     status_confidence: Literal["high", "medium", "low"]
+    is_new_application_confirmation: bool
+    suggested_company: Optional[str]
+    suggested_role: Optional[str]
     reason: str
 
 
@@ -113,12 +118,17 @@ Applications on file (id: company - role - current status):
 
 Status changes only ever move forward: applied -> interviewing -> offer OR rejected. Never suggest moving an application backward, and never suggest a status change for an application that's already offer or rejected.
 
+If this doesn't match any application on file, decide separately whether it's a direct confirmation that the person just applied somewhere new (e.g. "we received your application", "thanks for applying") as opposed to something else job-related but not actionable (a newsletter, a job recommendation, a platform signup notice, etc).
+
 Respond with:
 - is_job_related: true only if this is clearly about one of these applications or the person's job search
 - application_id: the id of the matching application, or null if unclear or unrelated
 - application_match_confidence: how confident you are in that match
 - status: what this email signals about status, or null if it doesn't indicate one
 - status_confidence: how confident you are in that status signal
+- is_new_application_confirmation: true only if application_id is null AND this is a direct confirmation of a brand new application, not already on file
+- suggested_company: if is_new_application_confirmation is true, the company this application is for, otherwise null
+- suggested_role: if is_new_application_confirmation is true, your best guess at the role/title mentioned, or "Unknown" if it's not stated - otherwise null
 - reason: one sentence explaining your reasoning"""
 
     try:
@@ -160,6 +170,15 @@ def analyze_email(email, applications):
     if application is None:
         if not analysis.is_job_related and analysis.application_match_confidence == "low":
             return EmailResult(None, None, True, "Not related to any application on file.")
+        if analysis.is_new_application_confirmation and analysis.suggested_company:
+            return EmailResult(
+                None,
+                None,
+                False,
+                analysis.reason,
+                suggested_company=analysis.suggested_company,
+                suggested_role=analysis.suggested_role or "Unknown",
+            )
         return EmailResult(None, None, False, analysis.reason)
 
     if status is None:

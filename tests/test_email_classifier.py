@@ -105,6 +105,9 @@ def test_analyze_email_escalates_to_llm_when_ambiguous():
         application_match_confidence="high",
         status="interviewing",
         status_confidence="high",
+        is_new_application_confirmation=False,
+        suggested_company=None,
+        suggested_role=None,
         reason="mentions interview",
     )
     with patch("app.email_classifier.llm_classify_and_match", return_value=fake_analysis):
@@ -123,6 +126,9 @@ def test_analyze_email_confident_match_no_status_change_is_skipped_not_reviewed(
         application_match_confidence="high",
         status=None,
         status_confidence="low",
+        is_new_application_confirmation=False,
+        suggested_company=None,
+        suggested_role=None,
         reason="confirms receipt, no status signal",
     )
     with patch("app.email_classifier.llm_classify_and_match", return_value=fake_analysis):
@@ -141,6 +147,9 @@ def test_analyze_email_llm_unconfident_goes_to_review():
         application_match_confidence="low",
         status=None,
         status_confidence="low",
+        is_new_application_confirmation=False,
+        suggested_company=None,
+        suggested_role=None,
         reason="not sure",
     )
     with patch("app.email_classifier.llm_classify_and_match", return_value=fake_analysis):
@@ -157,6 +166,9 @@ def test_analyze_email_llm_confidently_unrelated_skips_silently():
         application_match_confidence="low",
         status=None,
         status_confidence="low",
+        is_new_application_confirmation=False,
+        suggested_company=None,
+        suggested_role=None,
         reason="unrelated receipt",
     )
     with patch("app.email_classifier.llm_classify_and_match", return_value=fake_analysis):
@@ -164,6 +176,48 @@ def test_analyze_email_llm_confidently_unrelated_skips_silently():
     assert result.confident is True
     assert result.application_id is None
     assert result.status is None
+
+
+def test_analyze_email_new_application_confirmation_suggests_creation():
+    email = {"subject": "Thanks for applying to Stripe!", "sender": "no-reply@stripe.com", "snippet": "received"}
+    apps = [FakeApplication(1, "Acme Corp", status="applied")]
+    fake_analysis = EmailAnalysis(
+        is_job_related=True,
+        application_id=None,
+        application_match_confidence="low",
+        status="applied",
+        status_confidence="high",
+        is_new_application_confirmation=True,
+        suggested_company="Stripe",
+        suggested_role="Software Engineer, New Grad",
+        reason="confirms a new application to Stripe, not on file",
+    )
+    with patch("app.email_classifier.llm_classify_and_match", return_value=fake_analysis):
+        result = analyze_email(email, apps)
+    assert result.confident is False
+    assert result.application_id is None
+    assert result.suggested_company == "Stripe"
+    assert result.suggested_role == "Software Engineer, New Grad"
+
+
+def test_analyze_email_new_application_confirmation_defaults_unknown_role():
+    email = {"subject": "We received your application", "sender": "no-reply@noom.com", "snippet": "received"}
+    apps = []
+    fake_analysis = EmailAnalysis(
+        is_job_related=True,
+        application_id=None,
+        application_match_confidence="low",
+        status="applied",
+        status_confidence="high",
+        is_new_application_confirmation=True,
+        suggested_company="Noom",
+        suggested_role=None,
+        reason="confirms a new application to Noom, role not stated",
+    )
+    with patch("app.email_classifier.llm_classify_and_match", return_value=fake_analysis):
+        result = analyze_email(email, apps)
+    assert result.suggested_company == "Noom"
+    assert result.suggested_role == "Unknown"
 
 
 def test_analyze_email_no_llm_configured_goes_to_review():
@@ -183,6 +237,9 @@ def test_analyze_email_rejects_hallucinated_application_id():
         application_match_confidence="high",
         status="interviewing",
         status_confidence="high",
+        is_new_application_confirmation=False,
+        suggested_company=None,
+        suggested_role=None,
         reason="hallucinated",
     )
     with patch("app.email_classifier.llm_classify_and_match", return_value=fake_analysis):
@@ -207,6 +264,9 @@ def test_llm_classify_and_match_calls_anthropic(monkeypatch):
         application_match_confidence="low",
         status=None,
         status_confidence="low",
+        is_new_application_confirmation=False,
+        suggested_company=None,
+        suggested_role=None,
         reason="x",
     )
     mock_response = MagicMock(parsed_output=fake_parsed)

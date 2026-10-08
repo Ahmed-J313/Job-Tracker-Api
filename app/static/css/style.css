@@ -456,6 +456,9 @@ input:focus, textarea:focus {
 .review-item-actions .btn-secondary,
 .review-item-actions .btn-primary { padding: 7px 14px; font-size: 13px; }
 
+.review-item-suggestion { border-left: 3px solid var(--status-applied); padding-left: 13px; }
+.review-item-suggestion-label { font-size: 13px; font-weight: 600; color: var(--status-applied); margin: 0 0 10px; }
+
 /* ---------- Applications tab ---------- */
 
 .applications-toolbar {

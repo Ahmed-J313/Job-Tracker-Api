@@ -222,6 +222,9 @@ def sync():
                     snippet=email["snippet"],
                     sender=email["sender"],
                     reason=result.reason,
+                    kind="new_application" if result.suggested_company else "ambiguous",
+                    suggested_company=result.suggested_company,
+                    suggested_role=result.suggested_role,
                 )
             )
             needs_review += 1
@@ -278,3 +281,25 @@ def resolve_review_item(item_id):
     item.resolved_at = datetime.utcnow()
     db.session.commit()
     return jsonify(item.to_dict()), 200
+
+
+@gmail_bp.route("/review-items/<int:item_id>/create-application", methods=["POST"])
+@jwt_required()
+def create_application_from_review_item(item_id):
+    item = _get_owned_review_item(item_id)
+    if not item:
+        return jsonify({"error": "Review item not found"}), 404
+    if item.kind != "new_application" or not item.suggested_company:
+        return jsonify({"error": "This review item has no suggested application to create"}), 400
+
+    application = Application(
+        user_id=_current_user_id(),
+        company=item.suggested_company,
+        role_title=item.suggested_role or "Unknown",
+        status="applied",
+    )
+    db.session.add(application)
+    item.resolution = "resolved"
+    item.resolved_at = datetime.utcnow()
+    db.session.commit()
+    return jsonify({"application": application.to_dict(), "review_item": item.to_dict()}), 201

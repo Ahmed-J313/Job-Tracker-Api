@@ -250,3 +250,118 @@ def test_cannot_dismiss_other_users_review_item(client, app, user, other_auth_he
 def test_review_items_require_auth(client):
     resp = client.get("/api/gmail/review-items")
     assert resp.status_code == 401
+
+
+def test_create_application_from_review_item(client, app, user, auth_headers):
+    with app.app_context():
+        item = EmailReviewItem(
+            user_id=user,
+            gmail_message_id="m1",
+            subject="Thanks for applying to Stripe!",
+            reason="confirms a new application, not on file",
+            kind="new_application",
+            suggested_company="Stripe",
+            suggested_role="Software Engineer, New Grad",
+        )
+        _db.session.add(item)
+        _db.session.commit()
+        item_id = item.id
+
+    resp = client.post(f"/api/gmail/review-items/{item_id}/create-application", headers=auth_headers)
+    assert resp.status_code == 201
+    data = resp.get_json()
+    assert data["application"]["company"] == "Stripe"
+    assert data["application"]["role_title"] == "Software Engineer, New Grad"
+    assert data["application"]["status"] == "applied"
+    assert data["review_item"]["resolution"] == "resolved"
+
+    with app.app_context():
+        apps = Application.query.filter_by(user_id=user, company="Stripe").all()
+        assert len(apps) == 1
+
+
+def test_create_application_falls_back_to_unknown_role(client, app, user, auth_headers):
+    with app.app_context():
+        item = EmailReviewItem(
+            user_id=user,
+            gmail_message_id="m1",
+            reason="confirms a new application, role not stated",
+            kind="new_application",
+            suggested_company="Noom",
+            suggested_role=None,
+        )
+        _db.session.add(item)
+        _db.session.commit()
+        item_id = item.id
+
+    resp = client.post(f"/api/gmail/review-items/{item_id}/create-application", headers=auth_headers)
+    assert resp.status_code == 201
+    assert resp.get_json()["application"]["role_title"] == "Unknown"
+
+
+def test_create_application_rejects_ambiguous_review_item(client, app, user, auth_headers):
+    with app.app_context():
+        item = EmailReviewItem(user_id=user, gmail_message_id="m1", reason="unsure")
+        _db.session.add(item)
+        _db.session.commit()
+        item_id = item.id
+
+    resp = client.post(f"/api/gmail/review-items/{item_id}/create-application", headers=auth_headers)
+    assert resp.status_code == 400
+
+
+def test_cannot_create_application_from_other_users_review_item(client, app, user, other_auth_headers):
+    with app.app_context():
+        item = EmailReviewItem(
+            user_id=user,
+            gmail_message_id="m1",
+            reason="confirms a new application",
+            kind="new_application",
+            suggested_company="Stripe",
+            suggested_role="SWE",
+        )
+        _db.session.add(item)
+        _db.session.commit()
+        item_id = item.id
+
+    resp = client.post(f"/api/gmail/review-items/{item_id}/create-application", headers=other_auth_headers)
+    assert resp.status_code == 404
+
+
+def test_create_application_requires_auth(client):
+    resp = client.post("/api/gmail/review-items/1/create-application")
+    assert resp.status_code == 401
+
+
+def test_sync_creates_review_item_with_new_application_kind(client, app, gmail_connected_user, auth_headers):
+    with patch("app.gmail.refresh_access_token", return_value="fake-access-token"), patch(
+        "app.gmail.list_recent_message_ids", return_value=["msg1"]
+    ), patch(
+        "app.gmail.get_message_summary",
+        return_value={
+            "id": "msg1",
+            "subject": "Thanks for applying to Stripe!",
+            "sender": "no-reply@stripe.com",
+            "snippet": "received",
+        },
+    ), patch(
+        "app.gmail.analyze_email",
+        return_value=EmailResult(
+            application_id=None,
+            status=None,
+            confident=False,
+            reason="confirms a new application to Stripe, not on file",
+            suggested_company="Stripe",
+            suggested_role="Software Engineer, New Grad",
+        ),
+    ):
+        resp = client.post("/api/gmail/sync", headers=auth_headers)
+
+    assert resp.status_code == 200
+    assert resp.get_json()["needs_review"] == 1
+
+    with app.app_context():
+        item = EmailReviewItem.query.filter_by(gmail_message_id="msg1").first()
+        assert item.kind == "new_application"
+        assert item.suggested_company == "Stripe"
+        assert item.suggested_role == "Software Engineer, New Grad"

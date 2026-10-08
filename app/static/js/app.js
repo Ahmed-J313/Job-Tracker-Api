@@ -496,6 +496,7 @@
     items.forEach((item) => {
       const li = document.createElement("li");
       li.className = "review-item";
+      if (item.kind === "new_application") li.classList.add("review-item-suggestion");
 
       const subject = document.createElement("div");
       subject.className = "review-item-subject";
@@ -528,14 +529,30 @@
       dismissBtn.textContent = "Dismiss";
       dismissBtn.addEventListener("click", () => resolveReviewItem(item.id, "dismiss"));
 
-      const resolveBtn = document.createElement("button");
-      resolveBtn.type = "button";
-      resolveBtn.className = "btn-primary";
-      resolveBtn.textContent = "Mark resolved";
-      resolveBtn.addEventListener("click", () => resolveReviewItem(item.id, "resolve"));
+      if (item.kind === "new_application") {
+        const suggestion = document.createElement("p");
+        suggestion.className = "review-item-suggestion-label";
+        suggestion.textContent = `Looks like a new application: ${item.suggested_company} - ${item.suggested_role}`;
+        li.appendChild(suggestion);
 
-      actions.appendChild(dismissBtn);
-      actions.appendChild(resolveBtn);
+        const addBtn = document.createElement("button");
+        addBtn.type = "button";
+        addBtn.className = "btn-primary";
+        addBtn.textContent = "Add as application";
+        addBtn.addEventListener("click", () => resolveReviewItem(item.id, "create-application"));
+
+        actions.appendChild(dismissBtn);
+        actions.appendChild(addBtn);
+      } else {
+        const resolveBtn = document.createElement("button");
+        resolveBtn.type = "button";
+        resolveBtn.className = "btn-primary";
+        resolveBtn.textContent = "Mark resolved";
+        resolveBtn.addEventListener("click", () => resolveReviewItem(item.id, "resolve"));
+
+        actions.appendChild(dismissBtn);
+        actions.appendChild(resolveBtn);
+      }
       li.appendChild(actions);
 
       reviewItemsList.appendChild(li);
@@ -555,6 +572,10 @@
     try {
       await api(`/gmail/review-items/${id}/${action}`, { method: "POST" });
       loadReviewItems();
+      if (action === "create-application") {
+        loadApplications();
+        loadDashboard();
+      }
     } catch (err) {
       showToast(err.message, true);
     }

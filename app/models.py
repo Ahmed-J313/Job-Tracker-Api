@@ -45,6 +45,9 @@ class EmailReviewItem(db.Model):
     snippet = db.Column(db.Text)
     sender = db.Column(db.String(255))
     reason = db.Column(db.Text, nullable=False)
+    kind = db.Column(db.String(16), nullable=False, default="ambiguous")
+    suggested_company = db.Column(db.String(255), nullable=True)
+    suggested_role = db.Column(db.String(255), nullable=True)
     resolution = db.Column(db.String(16))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     resolved_at = db.Column(db.DateTime)
@@ -57,6 +60,9 @@ class EmailReviewItem(db.Model):
             "snippet": self.snippet,
             "sender": self.sender,
             "reason": self.reason,
+            "kind": self.kind,
+            "suggested_company": self.suggested_company,
+            "suggested_role": self.suggested_role,
             "resolution": self.resolution,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
