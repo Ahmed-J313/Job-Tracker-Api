@@ -157,9 +157,12 @@ def analyze_email(email, applications):
     if not status_confident:
         status = analysis.status if analysis.status_confidence != "low" else None
 
-    if application is None or status is None:
-        if not analysis.is_job_related and analysis.application_match_confidence == "low" and analysis.status_confidence == "low":
+    if application is None:
+        if not analysis.is_job_related and analysis.application_match_confidence == "low":
             return EmailResult(None, None, True, "Not related to any application on file.")
         return EmailResult(None, None, False, analysis.reason)
+
+    if status is None:
+        return EmailResult(application.id, None, True, "Matched to an application, but no status change was signaled.")
 
     return EmailResult(application.id, status, True, analysis.reason)

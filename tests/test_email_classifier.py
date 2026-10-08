@@ -114,6 +114,24 @@ def test_analyze_email_escalates_to_llm_when_ambiguous():
     assert result.status == "interviewing"
 
 
+def test_analyze_email_confident_match_no_status_change_is_skipped_not_reviewed():
+    email = {"subject": "Re: your application", "sender": "hr@acme.com", "snippet": "We received your application."}
+    apps = [FakeApplication(1, "Acme Corp", status="applied")]
+    fake_analysis = EmailAnalysis(
+        is_job_related=True,
+        application_id=1,
+        application_match_confidence="high",
+        status=None,
+        status_confidence="low",
+        reason="confirms receipt, no status signal",
+    )
+    with patch("app.email_classifier.llm_classify_and_match", return_value=fake_analysis):
+        result = analyze_email(email, apps)
+    assert result.confident is True
+    assert result.application_id == 1
+    assert result.status is None
+
+
 def test_analyze_email_llm_unconfident_goes_to_review():
     email = {"subject": "re: update", "sender": "x@y.com", "snippet": "hmm"}
     apps = [FakeApplication(1, "Acme Corp", status="applied")]
